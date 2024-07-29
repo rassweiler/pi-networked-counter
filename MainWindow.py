@@ -12,7 +12,10 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(800, 600)
+        MainWindow.resize(800, 480)
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap("favicon.ico"), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
+        MainWindow.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.horizontalLayout_9 = QtWidgets.QHBoxLayout(self.centralwidget)
@@ -29,7 +32,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_5.setObjectName("verticalLayout_5")
         self.labelCurrentProduct = QtWidgets.QLabel(parent=self.tab)
         font = QtGui.QFont()
-        font.setPointSize(24)
+        font.setPointSize(20)
         self.labelCurrentProduct.setFont(font)
         self.labelCurrentProduct.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.labelCurrentProduct.setObjectName("labelCurrentProduct")
@@ -46,6 +49,8 @@ class Ui_MainWindow(object):
         self.frame.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
         self.frame.setObjectName("frame")
         self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.frame)
+        self.verticalLayout_4.setContentsMargins(7, 7, 7, 7)
+        self.verticalLayout_4.setSpacing(4)
         self.verticalLayout_4.setObjectName("verticalLayout_4")
         self.labelGood = QtWidgets.QLabel(parent=self.frame)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred)
@@ -54,7 +59,7 @@ class Ui_MainWindow(object):
         sizePolicy.setHeightForWidth(self.labelGood.sizePolicy().hasHeightForWidth())
         self.labelGood.setSizePolicy(sizePolicy)
         font = QtGui.QFont()
-        font.setPointSize(100)
+        font.setPointSize(86)
         self.labelGood.setFont(font)
         self.labelGood.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.labelGood.setObjectName("labelGood")
@@ -207,7 +212,7 @@ class Ui_MainWindow(object):
         palette.setBrush(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.PlaceholderText, brush)
         self.label_3.setPalette(palette)
         font = QtGui.QFont()
-        font.setPointSize(40)
+        font.setPointSize(30)
         self.label_3.setFont(font)
         self.label_3.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.label_3.setObjectName("label_3")
@@ -218,6 +223,8 @@ class Ui_MainWindow(object):
         self.frame_2.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
         self.frame_2.setObjectName("frame_2")
         self.verticalLayout_6 = QtWidgets.QVBoxLayout(self.frame_2)
+        self.verticalLayout_6.setContentsMargins(7, 7, 7, 7)
+        self.verticalLayout_6.setSpacing(4)
         self.verticalLayout_6.setObjectName("verticalLayout_6")
         self.labelRejects = QtWidgets.QLabel(parent=self.frame_2)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred)
@@ -226,7 +233,7 @@ class Ui_MainWindow(object):
         sizePolicy.setHeightForWidth(self.labelRejects.sizePolicy().hasHeightForWidth())
         self.labelRejects.setSizePolicy(sizePolicy)
         font = QtGui.QFont()
-        font.setPointSize(100)
+        font.setPointSize(86)
         self.labelRejects.setFont(font)
         self.labelRejects.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.labelRejects.setObjectName("labelRejects")
@@ -379,7 +386,7 @@ class Ui_MainWindow(object):
         palette.setBrush(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.PlaceholderText, brush)
         self.label_5.setPalette(palette)
         font = QtGui.QFont()
-        font.setPointSize(40)
+        font.setPointSize(30)
         self.label_5.setFont(font)
         self.label_5.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.label_5.setObjectName("label_5")
@@ -395,16 +402,25 @@ class Ui_MainWindow(object):
         self.horizontalLayout_7 = QtWidgets.QHBoxLayout(self.frame_3)
         self.horizontalLayout_7.setObjectName("horizontalLayout_7")
         self.labelQualityPercent2 = QtWidgets.QLabel(parent=self.frame_3)
+        font = QtGui.QFont()
+        font.setPointSize(14)
+        self.labelQualityPercent2.setFont(font)
         self.labelQualityPercent2.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.labelQualityPercent2.setObjectName("labelQualityPercent2")
         self.horizontalLayout_7.addWidget(self.labelQualityPercent2)
         self.labelQualityPercent = QtWidgets.QLabel(parent=self.frame_3)
+        font = QtGui.QFont()
+        font.setPointSize(14)
+        self.labelQualityPercent.setFont(font)
         self.labelQualityPercent.setObjectName("labelQualityPercent")
         self.horizontalLayout_7.addWidget(self.labelQualityPercent)
         self.verticalLayout_5.addWidget(self.frame_3)
         spacerItem1 = QtWidgets.QSpacerItem(20, 20, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
         self.verticalLayout_5.addItem(spacerItem1)
         self.buttonResetCount = QtWidgets.QPushButton(parent=self.tab)
+        font = QtGui.QFont()
+        font.setPointSize(18)
+        self.buttonResetCount.setFont(font)
         self.buttonResetCount.setObjectName("buttonResetCount")
         self.verticalLayout_5.addWidget(self.buttonResetCount)
         self.debug.addTab(self.tab, "")
@@ -583,6 +599,7 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(16)
         font.setBold(True)
+        font.setWeight(75)
         self.label.setFont(font)
         self.label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.label.setObjectName("label")
@@ -793,9 +810,9 @@ class Ui_MainWindow(object):
         self.verticalLayout_3.addLayout(self.horizontalLayout_8)
         self.horizontalLayout_10 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_10.setObjectName("horizontalLayout_10")
-        self.label_10 = QtWidgets.QLabel(parent=self.tab_5)
-        self.label_10.setObjectName("label_10")
-        self.horizontalLayout_10.addWidget(self.label_10)
+        self.labelOutfeedDebug_2 = QtWidgets.QLabel(parent=self.tab_5)
+        self.labelOutfeedDebug_2.setObjectName("labelOutfeedDebug_2")
+        self.horizontalLayout_10.addWidget(self.labelOutfeedDebug_2)
         self.labelOutfeedDebug = QtWidgets.QLabel(parent=self.tab_5)
         self.labelOutfeedDebug.setObjectName("labelOutfeedDebug")
         self.horizontalLayout_10.addWidget(self.labelOutfeedDebug)
@@ -842,13 +859,9 @@ class Ui_MainWindow(object):
         self.debug.addTab(self.tab_4, "")
         self.horizontalLayout_9.addWidget(self.debug)
         MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(parent=MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 19))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
 
         self.retranslateUi(MainWindow)
-        self.debug.setCurrentIndex(2)
+        self.debug.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
         MainWindow.setTabOrder(self.debug, self.buttonResetCount)
         MainWindow.setTabOrder(self.buttonResetCount, self.productList)
@@ -889,25 +902,19 @@ class Ui_MainWindow(object):
         self.debug.setTabText(self.debug.indexOf(self.tab_2), _translate("MainWindow", "Products"))
         self.label_8.setText(_translate("MainWindow", "Infeed Sensor: "))
         self.labelInfeedDebug.setText(_translate("MainWindow", "0"))
-        self.label_10.setText(_translate("MainWindow", "Outfeed Sensor: "))
+        self.labelOutfeedDebug_2.setText(_translate("MainWindow", "Outfeed Sensor: "))
         self.labelOutfeedDebug.setText(_translate("MainWindow", "0"))
         self.label_7.setText(_translate("MainWindow", "Enable Rejects"))
         self.checkBoxEnableRejects.setText(_translate("MainWindow", "Reject Sensor"))
         self.label_9.setText(_translate("MainWindow", "Trigger Point"))
         self.debug.setTabText(self.debug.indexOf(self.tab_5), _translate("MainWindow", "Debug"))
         self.textBrowser.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
+"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
-"hr { height: 1px; border-width: 0; }\n"
-"li.unchecked::marker { content: \"\\2610\"; }\n"
-"li.checked::marker { content: \"\\2612\"; }\n"
 "</style></head><body style=\" font-family:\'Sans Serif\'; font-size:20pt; font-weight:400; font-style:normal;\">\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:18pt; font-weight:700;\">Networked Object Counter</span></p>\n"
-"<p align=\"center\" style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:18pt; font-weight:700;\"><br /></p>\n"
-"<p align=\"center\" style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:16pt;\"><br /></p>\n"
+"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:18pt; font-weight:704;\">Networked Object Counter</span></p>\n"
 "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:14pt;\">Created by Rassweiler Automation</span></p>\n"
-"<p align=\"center\" style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:14pt;\"><br /></p>\n"
-"<p align=\"center\" style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:14pt;\"><br /></p>\n"
+"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><img src=\":/Logos/logo-small.png\" /></p>\n"
 "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:14pt;\">Source: </span><a href=\"https://github.com/rassweiler/pi-networked-counter\"><span style=\" font-size:16pt; text-decoration: underline; color:#0000ff;\">https://github.com/rassweiler/pi-networked-counter</span></a></p>\n"
 "<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:16pt; text-decoration: underline; color:#0000ff;\"><br /></p></body></html>"))
         self.exitButton.setText(_translate("MainWindow", "Exit"))
