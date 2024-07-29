@@ -14,9 +14,9 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout_3">
+   <layout class="QHBoxLayout" name="horizontalLayout_9">
     <item>
-     <widget class="QTabWidget" name="tabWidget">
+     <widget class="QTabWidget" name="debug">
       <property name="enabled">
        <bool>true</bool>
       </property>
@@ -26,7 +26,7 @@
        </font>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -2157,11 +2157,81 @@
       </widget>
       <widget class="QWidget" name="tab_5">
        <property name="enabled">
-        <bool>false</bool>
+        <bool>true</bool>
        </property>
        <attribute name="title">
-        <string>Settings</string>
+        <string>Debug</string>
        </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_3">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_8">
+          <item>
+           <widget class="QLabel" name="label_8">
+            <property name="text">
+             <string>Infeed Sensor: </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelInfeedDebug">
+            <property name="text">
+             <string>0</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_10">
+          <item>
+           <widget class="QLabel" name="labelOutfeedDebug_2">
+            <property name="text">
+             <string>Outfeed Sensor: </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelOutfeedDebug">
+            <property name="text">
+             <string>0</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_11">
+          <item>
+           <widget class="QLabel" name="label_7">
+            <property name="text">
+             <string>Enable Rejects</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBoxEnableRejects">
+            <property name="text">
+             <string>Reject Sensor</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_12">
+          <item>
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>Trigger Point</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="doubleSpinBoxTriggerPoint"/>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </widget>
       <widget class="QWidget" name="tab_4">
        <property name="sizePolicy">
@@ -2237,7 +2307,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
   </widget>
  </widget>
  <tabstops>
-  <tabstop>tabWidget</tabstop>
+  <tabstop>debug</tabstop>
   <tabstop>buttonResetCount</tabstop>
   <tabstop>productList</tabstop>
   <tabstop>buttonLoadProduct</tabstop>
