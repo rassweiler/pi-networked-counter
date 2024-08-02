@@ -1,5 +1,7 @@
 #!/bin/bash
 
-source ~/pi-networked-counter/venv/bin/activate
+cd ~/pi-networked-counter
 
-python3 ~/pi-networked-counter/main.py
+source venv/bin/activate
+
+python3 main.py
