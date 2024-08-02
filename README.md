@@ -3,6 +3,9 @@ Network attached counter using Pi5, python, pyqt5, and sqlite
 
 ![Assembly](./Docs/Assembly_01.png)
 ![Assembly Opened](./Docs/Assembly_02.png)
+![Sensor Assembly](./Docs/SensorAssembly_01.png)
+![Sensor Assembly 2](./Docs/SensorAssembly_02.png)
+![Sensor Assembly Opened](./Docs/SensorAssembly_03.png)
 
 ## Setup (Pi 5+)
 
