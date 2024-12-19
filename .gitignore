@@ -219,3 +219,5 @@ cython_debug/
 #Sqlite3
 *.db
 *.database
+
+.env.sharepoint
