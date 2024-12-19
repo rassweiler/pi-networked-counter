@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Toggle Virtual Keyboard
+Comment=Toggle Virtual Keyboard
+Exec=/usr/bin/toggle-keyboard.sh
+Type=Application
+Icon=matchbox-keyboard.png
+Categories=Panel;Utility;MB
+X-MB-INPUT-MECHANISM=True

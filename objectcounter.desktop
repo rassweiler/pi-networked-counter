@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Exec=lxterminal -e "/home/tech/pi-networked-counter/start.sh"
+Name=ObjectCounter
+Icon=/home/tech/pi-networked-counter/favicon.ico
