@@ -1,7 +1,4 @@
 #!/bin/bash
-
-cd ~/pi-networked-counter
-
-source venv/bin/activate
-
-python3 main.py
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+cd "$parent_path"
+venv/bin/python main.py
