@@ -267,6 +267,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.lineEditSharepointExport02ListID.textChanged.connect(self.sharepoint_list_id_02_changed)
         self.export_01_timer.timeout.connect(self.export_data_01)
         self.export_02_timer.timeout.connect(self.export_data_02)
+        self.pushButtonClearCounDatabase.released.connect(self.clear_count_database)
+        #Set Initial
         self.lineEditMachineName.setText(self.machine_name)
         self.frameCountTarget.setVisible(False)
         self.spinBoxInfeedPin.setValue(self.infeed_pin)
@@ -523,11 +525,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if self.loaded_product.target_count > 0:
                 self.labelCountTarget.setText(str(self.loaded_product.target_count))
             else:
-                self.labelCountTarget.setText("*Count Target Not Set*") 
+                self.labelCountTarget.setText("*!*") 
             if self.loaded_product.target_pace > 0:
                 self.labelTargetPPM.setText(str(self.loaded_product.target_pace))
             else:
-               self.labelTargetPPM.setText("*PPM Target Not Set*") 
+               self.labelTargetPPM.setText("*!*") 
 
     def reset_counts(self):
         if self.last_count:
@@ -842,8 +844,15 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.current_ppm = len(self.count_list) / minutes
         self.current_ppm_delta = self.current_ppm - self.loaded_product.target_pace
 
+    def clear_count_database(self):
+        self.cursor.execute('DELETE FROM counts')
+        self.connection.commit()
 
     def quit_app(self):
+        if self.export_01_timer.isActive():
+            self.export_01_timer.stop()
+        if self.export_02_timer.isActive():
+            self.export_02_timer.stop()
         self.connection.close()
         QApplication.quit()
 
