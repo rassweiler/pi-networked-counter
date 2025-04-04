@@ -1,6 +1,3 @@
 #!/bin/bash
-parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
-cd "$parent_path"
-
-
-venv/bin/python GenerateToken.py
+cd /home/tech/pi-networked-counter/
+/home/tech/pi-networked-counter/venv/bin/python /home/tech/pi-networked-counter/GenerateToken.py

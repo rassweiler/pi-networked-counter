@@ -66,6 +66,6 @@ class Token(object):
 
     
 if __name__ == "__main__":
-    token = Token()
+    token = Token(plaintext=True)
     token.aquire_token()
     print("Press Ctrl-C to finish...")

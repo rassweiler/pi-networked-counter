@@ -25,14 +25,16 @@ class SharepointExport(object):
             print(Colors.FAIL + "Request failed: %s"  % request.reason + Colors.ENDC)
             return False
         data = request.json()
+        if not 'uploadUrl' in data:
+            print(Colors.FAIL + "uploadUrl not in data, SharepointExport.py:27 %s"  % Colors.ENDC)
+            return False
         file_size = self.get_file_size(file_path + file_name)
-        file_size2 = file_size - 1
         file = open(file_path + file_name, "rb")
         file_data = file.read()
         file.close()
         upload_headers = self.header
         upload_headers.update({'Content-Length': '{}'.format(file_size)})
-        upload_headers.update({'Content-Range': 'bytes 0-{}/{}'.format(file_size2,file_size)})
+        upload_headers.update({'Content-Range': 'bytes 0-{}/{}'.format(file_size - 1,file_size)})
         status = requests.put(data['uploadUrl'], headers=upload_headers,data=file_data)
         print(status)
         if status.status_code == 400:
