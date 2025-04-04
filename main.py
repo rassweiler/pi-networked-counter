@@ -2,12 +2,13 @@
 
 import sys
 import sqlite3
+import logging
 from enum import Enum
 from csv import writer
 from datetime import datetime, timedelta
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import Qt, QTimer
-from gpiozero import DigitalInputDevice
+from gpiozero import DigitalInputDevice, LED
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from MainWindow import Ui_MainWindow
 from Product import Product
@@ -25,9 +26,17 @@ class OperationMode(Enum):
     REJECT = 2
     PACE = 3
 
+class OperationState(Enum):
+    NORMAL = 0
+    WARNING = 1
+    FAULT = 2
+
 class ObjectCounter(QMainWindow, Ui_MainWindow):
     def __init__(self, parent = None):
         super().__init__(parent)
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(filename='.counter_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
+        self.logger.info('Started Program')
         self.setupUi(self)
 
         self.current_good: int = 0
@@ -48,12 +57,16 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.export_02_timer: QTimer = QTimer()
         self.is_export_setup: bool = False
         self.sharepoint_export: SharepointExport = None
+        self.current_operation_state: OperationState = OperationState.FAULT.value
 
         self.operation_mode: int = 0
         self.is_reject_enabled: bool = False
         self.bounce_time: float = 0.1
         self.infeed_pin: int = 17
-        self.outfeed_pin: int = 22
+        self.outfeed_pin: int = 23
+        self.stack_pin_green: int = 27
+        self.stack_pin_yellow: int = 22
+        self.stack_pin_red: int = 24
         self.machine_name: str = "SampleMachine"
         self.export_backend: int = 0
         self.is_export_folder_01_enabled: bool = False
@@ -78,20 +91,26 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.export_sharepoint_02_path: str = ""
         self.tech_password: str = "230167"
         self.ops_password: str = "111111"
+        self.is_stack_light_enabled: bool = False
 
         #Create table structures
+        self.logger.info('Setting up tables...')
         self.connection = sqlite3.connect('/home/tech/pi-networked-counter/database.db',detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES, check_same_thread=False)
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA foreign_keys = ON')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings(setting_id TEXT PRIMARY KEY UNIQUE, title TEXT, value TEXT);')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS products(product_id INTEGER PRIMARY KEY UNIQUE, title TEXT, target_count INTEGER, target_pace INTEGER, product_weight REAL);')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS counts(countdatetime INTEGEGER PRIMARY KEY UNIQUE, machine TEXT NOT NULL, reject INTEGER NOT NULL, product_id INTEGER NOT NULL, FOREIGN KEY(product_id) REFERENCES products (product_id) ON DELETE CASCADE);')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS counts(count_id INTEGER PRIMARY KEY, countdatetime INTEGER UNIQUE NOT NULL, machine TEXT NOT NULL, reject INTEGER NOT NULL, product_id INTEGER NOT NULL, FOREIGN KEY(product_id) REFERENCES products (product_id) ON DELETE CASCADE);')
         result = self.cursor.execute('SELECT EXISTS (SELECT 1 FROM settings);').fetchone()
         if not result[0]:
+            self.logger.info('Settings not found, creating defaults')
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('operation_mode', 'Operation Mode', "0"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('bounce_time', 'Bounce Time (s)', "0.1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('infeed_pin', 'Infeed Pin', "17"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('outfeed_pin', 'Outfeed Pin', "22"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('outfeed_pin', 'Outfeed Pin', "23"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_green', 'Stack Green', "27"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_yellow', 'Stack Yellow', "22"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_red', 'Stack Red', "24"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('machine_name', 'Machine Name', "sample_machine"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_backend', 'Export Backend', "0"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "0"))
@@ -115,6 +134,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_path', 'Export Sharepoint 01 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_path', 'Export Sharepoint 02 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('tech_password', 'Tech Password', "230167"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('ops_password', 'Ops Password', "111111"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light', "0"))
             self.connection.commit()
 
         result: list = self.cursor.execute('SELECT * FROM settings').fetchall()
@@ -129,6 +150,12 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         self.infeed_pin = int(setting[2])
                     case 'outfeed_pin':
                         self.outfeed_pin = int(setting[2])
+                    case 'stack_pin_green':
+                        self.stack_pin_green = int(setting[2])
+                    case 'stack_pin_yellow':
+                        self.stack_pin_yellow = int(setting[2])
+                    case 'stack_pin_red':
+                        self.stack_pin_red = int(setting[2])
                     case 'machine_name':
                         self.machine_name = str(setting[2])
                     case 'export_backend':
@@ -177,6 +204,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         self.tech_password = str(setting[2])
                     case 'ops_password':
                         self.ops_password = str(setting[2])
+                    case 'is_stack_light_enabled':
+                        self.is_stack_light_enabled = bool(setting[2])
 
         self.setup_sensors()
         #self.setup_export()
@@ -184,14 +213,19 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.get_all_products()
         
     def setup_sensors(self):
+        self.logger.info('Setting up sensors...')
         self.infeed_sensor: DigitalInputDevice = DigitalInputDevice(pin=self.infeed_pin, pull_up=True, bounce_time=self.bounce_time)
         self.outfeed_sensor: DigitalInputDevice = DigitalInputDevice(pin=self.outfeed_pin, pull_up=True, bounce_time=self.bounce_time)
         self.infeed_sensor.when_activated = self.sensor_activated
         self.outfeed_sensor.when_activated = self.sensor_activated
         self.infeed_sensor.when_deactivated = self.sensor_deactivated
         self.outfeed_sensor.when_deactivated = self.sensor_deactivated
+        self.stack_output_green = LED(pin=self.stack_pin_green, initial_value=False)
+        self.stack_output_yellow = LED(pin=self.stack_pin_yellow, initial_value=False)
+        self.stack_output_red = LED(pin=self.stack_pin_red, initial_value=False)
 
     def setup_export(self):
+        self.logger.info('Setting up exports...')
         self.is_export_setup = False
         if self.export_backend == ExportBackend.NONE.value:
             pass
@@ -226,6 +260,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.is_export_setup = True
         
     def set_ui(self):
+        self.logger.info('Setting up ui...')
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.showFullScreen()
         self.buttonExit.clicked.connect(self.quit_app)
@@ -238,6 +273,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.spinBoxInfeedPin.valueChanged.connect(self.infeed_pin_changed)
         self.spinBoxOutfeedPin.valueChanged.connect(self.outfeed_pin_changed)
         self.doubleSpinBoxBounceTime.valueChanged.connect(self.bounce_time_changed)
+        #Stacklight
+        self.checkBoxEnableStackLight.stateChanged.connect(self.enable_stack_light_changed)
+        self.spinBoxStackLightGreenOutput.valueChanged.connect(self.stack_light_pin_green_changed)
+        self.spinBoxStackLightYellowOutput.valueChanged.connect(self.stack_light_pin_yellow_changed)
+        self.spinBoxStackLightRedOutput.valueChanged.connect(self.stack_light_pin_red_changed)
         self.comboBoxOperationMode.currentIndexChanged.connect(self.operation_mode_changed)
         self.lineEditMachineName.textChanged.connect(self.machine_name_changed)
         self.lineEditLogin.returnPressed.connect(self.login_attempt)
@@ -268,12 +308,19 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.export_01_timer.timeout.connect(self.export_data_01)
         self.export_02_timer.timeout.connect(self.export_data_02)
         self.pushButtonClearCounDatabase.released.connect(self.clear_count_database)
+
         #Set Initial
         self.lineEditMachineName.setText(self.machine_name)
         self.frameCountTarget.setVisible(False)
         self.spinBoxInfeedPin.setValue(self.infeed_pin)
         self.spinBoxOutfeedPin.setValue(self.outfeed_pin)
         self.doubleSpinBoxBounceTime.setValue(self.bounce_time)
+        #Stacklight
+        self.frameStackLight.setVisible(self.is_stack_light_enabled)
+        self.checkBoxEnableStackLight.setChecked(self.is_stack_light_enabled)
+        self.spinBoxStackLightGreenOutput.setValue(self.stack_pin_green)
+        self.spinBoxStackLightYellowOutput.setValue(self.stack_pin_yellow)
+        self.spinBoxStackLightRedOutput.setValue(self.stack_pin_red)
         self.comboBoxOperationMode.setCurrentIndex(self.operation_mode)
         #Exports
         self.checkBoxFolderExport01.setChecked(self.is_export_folder_01_enabled)
@@ -300,9 +347,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
 
         self.export_backend_changed(self.export_backend)
         self.operation_mode_changed(self.operation_mode)
+        self.update_stack_light()
         self.login_attempt()
 
     def export_data_01(self):
+        self.logger.info('Running export 1...')
         if self.export_backend == ExportBackend.NONE.value:
             self.is_runing_exports_01 = False
             self.is_runing_exports_02 = False
@@ -314,7 +363,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 if result:
                     with open(self.export_folder_01_path + "/Counts/Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
                         w = writer(f)
-                        w.writerow(["Date Time", "Machine", "Reject", "Product ID"])
+                        w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
                 result = self.cursor.execute("SELECT * FROM products")
@@ -331,27 +380,34 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if self.is_export_sharepoint_01_enabled:
                 result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_01_period),))
                 if result:
-                    file_name: str = "Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv'
+                    file_name: str = "Counts_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
                     with open(file_path + file_name, 'w', newline='') as f:
                         w = writer(f)
-                        w.writerow(["Date Time", "Machine", "Reject", "Product ID"])
+                        w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
-                    self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
+                    try:
+                        self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
+                    except:
+                        self.logger.exception('Unable to upload count file')
                 result = self.cursor.execute("SELECT * FROM products")
                 if result:
-                    file_name: str = "Products_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv'
+                    file_name: str = "Products_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
                     with open(file_path + file_name, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Title", "Target Count", "Target Pace", "Product Weight"])
                         w.writerows(result)
                     f.close()
-                    self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
+                    try:
+                        self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
+                    except:
+                        self.logger.exception('Unable to upload product file')
             self.is_runing_exports_01 = True
 
     def export_data_02(self):
+        self.logger.info('Running export 2...')
         if self.export_backend == ExportBackend.NONE.value:
             self.is_runing_exports_01 = False
             self.is_runing_exports_02 = False
@@ -363,7 +419,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 if result:
                     with open(self.export_folder_02_path + "/Counts/Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
                         w = writer(f)
-                        w.writerow(["Date Time", "Machine", "Reject", "Product ID"])
+                        w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
                 result = self.cursor.execute("SELECT * FROM products")
@@ -380,24 +436,30 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if self.is_export_sharepoint_01_enabled:
                 result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_02_period),))
                 if result:
-                    file_name: str = "Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv'
+                    file_name: str = "Counts_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
                     with open(file_path + file_name, 'w', newline='') as f:
                         w = writer(f)
-                        w.writerow(["Date Time", "Machine", "Reject", "Product ID"])
+                        w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
-                    self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
+                    try:
+                        self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
+                    except:
+                        self.logger.exception('Unable to upload count file')
                 result = self.cursor.execute("SELECT * FROM products")
                 if result:
-                    file_name: str = "Products_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv'
+                    file_name: str = "Products_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
                     with open(file_path + file_name, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Title", "Target Count", "Target Pace", "Product Weight"])
                         w.writerows(result)
                     f.close()
-                    self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
+                    try:
+                        self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
+                    except:
+                        self.logger.exception('Unable to upload product file')
             self.is_runing_exports_02 = True
 
     def sensor_activated(self, sensor: DigitalInputDevice):
@@ -438,20 +500,28 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.labelOutfeedDebug.setText("0")
 
     def count_good(self, time: datetime, count: Count = None):
-        if not count:
-            count = Count(self.loaded_product.product_id, time)
-        self.cursor.execute('INSERT INTO counts VALUES (?,?,?,?);', (count.date,self.machine_name,0,count.product_id))
-        self.connection.commit()
-        self.current_good += 1
-        self.add_count_to_ppm_stack(count)
+        try:
+            self.logger.info('Counting good product...')
+            if not count:
+                count = Count(self.loaded_product.product_id, time)
+            self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,0,count.product_id))
+            self.connection.commit()
+            self.current_good += 1
+            self.add_count_to_ppm_stack(count)
+        except:
+            self.logger.exception('Unable to count good product')
 
     def count_reject(self, time: datetime, count: Count = None):
-        if count:
-            self.cursor.execute('INSERT INTO counts VALUES (?,?,?,?);', (count.date,self.machine_name,1,count.product_id))
-        else:
-            self.cursor.execute('INSERT INTO counts VALUES (?,?,?,?);', (time,self.machine_name,1,self.loaded_product.product_id))
-        self.connection.commit()
-        self.current_reject += 1
+        try:
+            self.logger.info('Counting reject product...')
+            if count:
+                self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,1,count.product_id))
+            else:
+                self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (time,self.machine_name,1,self.loaded_product.product_id))
+            self.connection.commit()
+            self.current_reject += 1
+        except:
+            self.logger.exception('Unable to count reject product')
 
     def get_all_products(self):
         self.all_products.clear()
@@ -525,11 +595,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if self.loaded_product.target_count > 0:
                 self.labelCountTarget.setText(str(self.loaded_product.target_count))
             else:
-                self.labelCountTarget.setText("*!*") 
+                self.labelCountTarget.setText("*Count Target Not Set*") 
             if self.loaded_product.target_pace > 0:
                 self.labelTargetPPM.setText(str(self.loaded_product.target_pace))
             else:
-               self.labelTargetPPM.setText("*!*") 
+               self.labelTargetPPM.setText("*PPM Target Not Set*") 
 
     def reset_counts(self):
         if self.last_count:
@@ -571,10 +641,29 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 pallette = self.tab.palette()
                 pallette.setColor(self.tab.backgroundRole(), QColor(100,250,100))
                 self.tab.setPalette(pallette)
+                self.current_operation_state = OperationState.NORMAL.value
             elif self.current_good > self.loaded_product.target_count:
                 pallette = self.tab.palette()
                 pallette.setColor(self.tab.backgroundRole(), QColor(250,100,100))
                 self.tab.setPalette(pallette)
+                self.current_operation_state = OperationState.FAULT.value
+            else:
+                self.current_operation_state = OperationState.WARNING.value
+        if not self.loaded_product:
+            self.current_operation_state = OperationState.FAULT.value
+        else:
+            if self.operation_mode == OperationMode.PACE.value:
+                if self.current_ppm_delta >= 0:
+                    self.current_operation_state = OperationState.NORMAL.value
+                else:
+                    self.current_operation_state = OperationState.WARNING.value
+            if self.operation_mode == OperationMode.REJECT.value:
+                if self.quality_percent >= 70:
+                    self.current_operation_state = OperationState.NORMAL.value
+                else:
+                    self.current_operation_state = OperationState.WARNING.value
+
+        self.update_stack_light()
 
     def machine_name_changed(self, name: str):
         if name != self.machine_name:
@@ -847,6 +936,59 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
     def clear_count_database(self):
         self.cursor.execute('DELETE FROM counts')
         self.connection.commit()
+
+    def enable_stack_light_changed(self, status: int):
+        self.is_stack_light_enabled = bool(status == 2)
+        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_stack_light_enabled"', (str(self.is_stack_light_enabled),))
+        self.connection.commit()
+        self.frameStackLight.setVisible(self.is_stack_light_enabled)
+
+    def stack_light_pin_green_changed(self, value):
+        self.stack_pin_green = value
+        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_green"', (str(value),))
+        self.connection.commit()
+
+    def stack_light_pin_yellow_changed(self, value):
+        self.stack_pin_yellow = value
+        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_yellow"', (str(value),))
+        self.connection.commit()
+
+    def stack_light_pin_red_changed(self, value):
+        self.stack_pin_red = value
+        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_red"', (str(value),))
+        self.connection.commit()
+
+    def update_stack_light(self):
+        if not self.is_stack_light_enabled:
+            self.stack_output_green.off()
+            self.stack_output_yellow.off()
+            self.stack_output_red.off()
+            self.labelGreenOutput.setText("0")
+            self.labelYellowOutput.setText("0")
+            self.labelRedOutput.setText("0")
+            return
+        match self.current_operation_state:
+            case OperationState.NORMAL.value:
+                self.stack_output_green.on()
+                self.stack_output_yellow.off()
+                self.stack_output_red.off()
+                self.labelGreenOutput.setText("1")
+                self.labelYellowOutput.setText("0")
+                self.labelRedOutput.setText("0")
+            case OperationState.WARNING.value:
+                self.stack_output_green.off()
+                self.stack_output_yellow.on()
+                self.stack_output_red.off()
+                self.labelGreenOutput.setText("0")
+                self.labelYellowOutput.setText("1")
+                self.labelRedOutput.setText("0")
+            case OperationState.FAULT.value:
+                self.stack_output_green.off()
+                self.stack_output_yellow.off()
+                self.stack_output_red.on()
+                self.labelGreenOutput.setText("0")
+                self.labelYellowOutput.setText("0")
+                self.labelRedOutput.setText("1")
 
     def quit_app(self):
         if self.export_01_timer.isActive():

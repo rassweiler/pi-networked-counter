@@ -1,6 +1,5 @@
 #!/bin/bash
 
-parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
-cd "$parent_path"
+cd /home/tech/pi-networked-counter
 
-venv/bin/pyuic6 form.ui -o MainWindow.py
+/home/tech/pi-networked-counter/venv/bin/pyuic6 form.ui -o MainWindow.py
