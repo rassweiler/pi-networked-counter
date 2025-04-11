@@ -6,7 +6,7 @@ import logging
 from enum import Enum
 from csv import writer
 from datetime import datetime, timedelta
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 from gpiozero import DigitalInputDevice, LED
 from PyQt6.QtWidgets import QApplication, QMainWindow
@@ -465,6 +465,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
     def sensor_activated(self, sensor: DigitalInputDevice):
         if sensor is self.infeed_sensor:
             self.labelInfeedDebug.setText("1")
+            self.labelIOInfeedInput.setPixmap(QPixmap('GreenCircle.png'))
             if not self.loaded_product:
                 return
             if not self.operation_mode == OperationMode.REJECT.value:
@@ -482,6 +483,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             
         elif sensor is self.outfeed_sensor:
             self.labelOutfeedDebug.setText("1")
+            self.labelIOOutfeedInput.setPixmap(QPixmap('GreenCircle.png'))
             if not self.loaded_product:
                 return
             if not self.operation_mode == OperationMode.REJECT.value:
@@ -495,9 +497,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
     def sensor_deactivated(self, sensor: DigitalInputDevice):
         if sensor is self.infeed_sensor:
             self.labelInfeedDebug.setText("0")
+            self.labelIOInfeedInput.setPixmap(QPixmap('RedCircle.png'))
             
         elif sensor is self.outfeed_sensor:
             self.labelOutfeedDebug.setText("0")
+            self.labelIOOutfeedInput.setPixmap(QPixmap('RedCircle.png'))
 
     def count_good(self, time: datetime, count: Count = None):
         try:
@@ -595,11 +599,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if self.loaded_product.target_count > 0:
                 self.labelCountTarget.setText(str(self.loaded_product.target_count))
             else:
-                self.labelCountTarget.setText("*Count Target Not Set*") 
+                self.labelCountTarget.setText("*N/A*") 
             if self.loaded_product.target_pace > 0:
                 self.labelTargetPPM.setText(str(self.loaded_product.target_pace))
             else:
-               self.labelTargetPPM.setText("*PPM Target Not Set*") 
+               self.labelTargetPPM.setText("*N/A*") 
 
     def reset_counts(self):
         if self.last_count:
@@ -618,6 +622,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
 
     def update_counts(self):
         self.labelGood.setText(str(self.current_good))
+        self.labelPaceCount.setText(str(self.current_good))
         self.labelRejects.setText(str(self.current_reject))
         self.labelCurrentPPM.setText(str(round(self.current_ppm)))
         self.labelPPMDelta.setText(str(round(self.current_ppm_delta)))
@@ -966,6 +971,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.labelGreenOutput.setText("0")
             self.labelYellowOutput.setText("0")
             self.labelRedOutput.setText("0")
+            self.labelIOStackRed.setPixmap(QPixmap('RedCircle.png'))
+            self.labelIOStackYellow.setPixmap(QPixmap('RedCircle.png'))
+            self.labelIOStackGreen.setPixmap(QPixmap('RedCircle.png'))
             return
         match self.current_operation_state:
             case OperationState.NORMAL.value:
@@ -975,6 +983,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.labelGreenOutput.setText("1")
                 self.labelYellowOutput.setText("0")
                 self.labelRedOutput.setText("0")
+                self.labelIOStackRed.setPixmap(QPixmap('RedCircle.png'))
+                self.labelIOStackYellow.setPixmap(QPixmap('RedCircle.png'))
+                self.labelIOStackGreen.setPixmap(QPixmap('GreenCircle.png'))
             case OperationState.WARNING.value:
                 self.stack_output_green.off()
                 self.stack_output_yellow.on()
@@ -982,6 +993,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.labelGreenOutput.setText("0")
                 self.labelYellowOutput.setText("1")
                 self.labelRedOutput.setText("0")
+                self.labelIOStackRed.setPixmap(QPixmap('RedCircle.png'))
+                self.labelIOStackYellow.setPixmap(QPixmap('GreenCircle.png'))
+                self.labelIOStackGreen.setPixmap(QPixmap('RedCircle.png'))
             case OperationState.FAULT.value:
                 self.stack_output_green.off()
                 self.stack_output_yellow.off()
@@ -989,6 +1003,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.labelGreenOutput.setText("0")
                 self.labelYellowOutput.setText("0")
                 self.labelRedOutput.setText("1")
+                self.labelIOStackRed.setPixmap(QPixmap('GreenCircle.png'))
+                self.labelIOStackYellow.setPixmap(QPixmap('RedCircle.png'))
+                self.labelIOStackGreen.setPixmap(QPixmap('RedCircle.png'))
 
     def quit_app(self):
         if self.export_01_timer.isActive():
