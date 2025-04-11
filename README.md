@@ -26,8 +26,8 @@ pip3 install gpiozero lgpio msal msal_extensions python-dotenv pygobject
 ## Device Setup (Pi5+)
 
 ### Base Version Part List
-- 1 [Rasperry Pi 5+](https://www.canakit.com/raspberry-pi-5-8gb.html?cid=CAD&src=raspberrypi)
-- 1 [Rasperry Pi 5+ Power Supply](https://www.canakit.com/official-raspberry-pi-5-power-supply-27w-usb-c.html?defpid=4863)
+- 1 [Raspberry Pi 5+](https://www.canakit.com/raspberry-pi-5-8gb.html?cid=CAD&src=raspberrypi)
+- 1 [Raspberry Pi 5+ Power Supply](https://www.canakit.com/official-raspberry-pi-5-power-supply-27w-usb-c.html?defpid=4863)
 - 1 [Micro SSD](https://www.amazon.ca/Samsung-Memory-Adapter-Limited-Warranty/dp/B09FFD6R2B/)
 - 1 [Raspberry Pi 7" screen](https://www.canakit.com/raspberry-pi-lcd-display-touchscreen.html)
 - 1 [Pi5 Diplay adapter cable](https://www.canakit.com/raspberry-pi-5-display-cable.html)
@@ -135,9 +135,10 @@ ENDPOINT="https://graph.microsoft.com/v1.0/me"
 
 - Pin 1 (Brown): 3.3V 
 - Pin 2 (White): Unused 
-- Pin 3 (Blue): Emmitter signal (Yellow) 
+- Pin 3 (Blue): Emitter signal (Yellow) 
 - Pin 4 (Black): Ground 
 - Pin 5 (Gray): Unused
+![Connector Pinout](./Docs/Connector_Pinout.png)
 
 ### Lightstack Pinout
 
@@ -162,3 +163,7 @@ ENDPOINT="https://graph.microsoft.com/v1.0/me"
 - Pin 22: To power led +
 - Pin 25 (GND): To dev board for ground
 - Pin 30 (GND): To power led -
+
+### Assembly Schematic
+The Pi5 board is not entirely accurate, the J2 and J8 pins are proper however.
+![Schematic](./Docs/Assembly.png)
