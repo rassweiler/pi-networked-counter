@@ -1,9 +1,13 @@
+#! /usr/bin/env python3
+
 import json
 import os
 import sys
+import logging
 import msal
-from msal_extensions import PersistedTokenCache, build_encrypted_persistence, FilePersistence
-from dotenv import load_dotenv
+import tomllib
+from typing import Dict, Any, Optional, List
+from msal_extensions import PersistedTokenCache, build_encrypted_persistence, FilePersistence, FilePersistenceBase
 
 class Colors:
     OKCYAN = '\033[96m'
@@ -13,18 +17,39 @@ class Colors:
     ENDC = '\033[0m'
 
 class Token(object):
-    def __init__(self, location:str=".cache", plaintext:bool=False, env:str=".env.sharepoint"):
-        load_dotenv(env)
-        self.persistance = self.build_persistence(location=location, plaintext=plaintext)
-        self.cache = PersistedTokenCache(persistence=self.persistance)
-        self.app = msal.PublicClientApplication(
-            client_id=os.getenv('CLIENT_ID'),
-            authority=os.getenv('AUTHORITY'),
-            token_cache=self.cache,
+    def __init__(self, location:str=".cache", plaintext:bool=False, setting_file: str = '.setup.toml'):
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(filename='./logs/.token_generator_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
+        self.settings: Dict[str, Any] = {}
+        self.client_id: str = ''
+        self.auth: str = ''
+        self.endpoint: str = ''
+        self.scopes: List[str] = []
+        self.LoadSettings(setting_file)
+        self.persistance: FilePersistenceBase = self.build_persistence(location=location, plaintext=plaintext)
+        self.cache: PersistedTokenCache = PersistedTokenCache(persistence=self.persistance)
+        self.app: msal.PublicClientApplication = msal.PublicClientApplication(
+            client_id = self.client_id,
+            authority = self.auth,
+            token_cache = self.cache,
             )
-        self.scopes = os.getenv('SCOPE', "").split()
 
-    def build_persistence(self,location: str, plaintext: bool):
+    def LoadSettings(self, setting_file: str) -> None:
+        with open(setting_file, 'rb') as file:
+            self.settings: Dict[str, Any] = tomllib.load(file)
+            if 'sharepoint' in self.settings: 
+                if 'authority' in self.settings['sharepoint']:
+                    self.auth = self.settings['sharepoint']['authority']
+                if 'client' in self.settings['sharepoint']:
+                    self.client_id = self.settings['sharepoint']['client']
+                if 'scopes' in self.settings['sharepoint']:
+                    self.scopes = self.settings['sharepoint']['scopes'].split()
+                if 'endpoint' in self.settings['sharepoint']:
+                    self.endpoint = self.settings['sharepoint']['endpoint']
+            else:
+                self.logger.warning('Unable to load sharepoint settings')
+
+    def build_persistence(self,location: str, plaintext: bool) -> FilePersistenceBase | None:
         if plaintext:
             print(Colors.WARNING + "Attempting plaintext persistance." + Colors.ENDC)
             try:
@@ -37,10 +62,31 @@ class Token(object):
                 return build_encrypted_persistence(location)
             except:
                 print(Colors.FAIL + "Failed to create encrypted persistance." + Colors.ENDC)
+
+    def build_persistence_new(self,location: str, plaintext_fallback: bool = True) -> FilePersistenceBase:
+        """
+           Build a suitable persistence instance based your current OS. 
+           Aquire persistance using encryption or plain text as fallback if enabled.
+           Note: This sample stores both encrypted persistence and plaintext persistence into same location,
+           therefore their data would likely override with each other.
+        """
+        try:
+            self.logger.info('Attempting encrypted persistance...')
+            return build_encrypted_persistence(location)
+        except:
+            """
+                On Linux, encryption exception will be raised during initialization.
+                On Windows and macOS, they won't be detected here,
+                but will be raised during their load() or save().
+            """
+            if not plaintext_fallback:
+                raise
+            self.logger.warning('Encryption not available, using plaintext...')
+            return FilePersistence(location)
     
-    def aquire_token(self):
+    def aquire_token(self) -> Dict[str, Any]:
         new_token = None
-        accounts: list = self.app.get_accounts()
+        accounts: List[Dict[str, str]] = self.app.get_accounts() # pyright: ignore[reportUnknownMemberType]
 
         if accounts:
             print(Colors.OKCYAN + "Checking cache for accounts and tokens..." + Colors.ENDC)
@@ -62,8 +108,7 @@ class Token(object):
             return(new_token)
         else:
             print(Colors.FAIL + "Failed to aquire token: %s" + Colors.ENDC  % new_token)
-
-
+        return {}
     
 if __name__ == "__main__":
     token = Token(plaintext=True)

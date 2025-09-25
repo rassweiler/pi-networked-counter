@@ -1,9 +1,13 @@
+#! /usr/bin/env python3
+
+from dataclasses import dataclass
 from datetime import datetime
 
+@dataclass
 class Count(object):
-    def __init__(self, product_id: int, date_time: datetime = datetime.now()):
-        self.date: datetime = date_time
-        self.product_id: float = product_id
+    product_id: int
+    date: datetime = datetime.now()
+    sensor: int = 0
 
 if __name__ == '__main__':
     exit(0)

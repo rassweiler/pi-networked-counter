@@ -1,23 +1,29 @@
+#! /usr/bin/env python3
+
 import os
+import logging
 import requests
-from urllib.parse import quote
+from typing import Dict, Any, Optional, List
+#from urllib.parse import quote
 from GenerateToken import Token, Colors
 
 class SharepointExport(object):
     def __init__(self):
-        self.token = None
-        self.header = None
-        self.body = None
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(filename='./logs/.sharepoint_export_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
+        self.token: Dict[str, Any] = {}
+        self.header: Dict[str, str] = {}
+        self.body: Dict[str, Any] = {}
         self.generator = Token(plaintext=True)
     
     def update_token(self):
-        self.token = self.generator.aquire_token()
+        self.token = self.generator.aquire_token() # type: ignore
         self.header = {'Authorization':'Bearer {}'.format(self.token['access_token'])}
 
     def get_file_size(self, file_path:str):
         return os.path.getsize(file_path)
     
-    def upload_file(self, file_path: str, file_name: str, site_id: str, list_id: str, upload_path: str):
+    def upload_file(self, file_path: str, file_name: str, site_id: str, list_id: str, upload_path: str) -> bool:
         self.update_token()
         self.body = {"item": {"@microsoft.graph.conflictBehavior": "replace",'name':'{}'.format(file_name)}}
         request = requests.post('https://graph.microsoft.com/v1.0/sites/'+site_id+'/drives/'+list_id+'/items/root:/'+upload_path+file_name+':/createUploadSession', headers=self.header, json=self.body)

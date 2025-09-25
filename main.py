@@ -3,9 +3,11 @@
 import sys
 import sqlite3
 import logging
+import tomllib
 from enum import Enum
 from csv import writer
 from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 from gpiozero import DigitalInputDevice, LED
@@ -25,6 +27,7 @@ class OperationMode(Enum):
     TARGET = 1
     REJECT = 2
     PACE = 3
+    DOUBLE = 4
 
 class OperationState(Enum):
     NORMAL = 0
@@ -35,20 +38,24 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
     def __init__(self, parent = None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
-        logging.basicConfig(filename='.counter_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
+        logging.basicConfig(filename='./logs/.counter_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
         self.logger.info('Started Program')
         self.setupUi(self)
 
         self.current_good: int = 0
         self.current_reject: int = 0
-        self.all_products: list = []
-        self.loaded_product: Product = None
-        self.selected_product: Product = None
-        self.last_count: Count = None
-        self.count_list: list = []
+        self.all_products: list[Product] = []
+        self.loaded_product: Product | None = None
+        self.selected_product: Product | None = None
+        self.last_count_1: Count | None = None
+        self.last_count_2: Count | None = None
+        self.count_list_1: list[Count] = []
+        self.count_list_2: list[Count] = []
         self.quality_percent: float = 0
-        self.current_ppm: float = 0
-        self.current_ppm_delta: float = 0
+        self.current_ppm_1: float = 0
+        self.current_ppm_2: float = 0
+        self.current_ppm_delta_1: float = 0
+        self.current_ppm_delta_2: float = 0
         self.is_logged_in: bool = False
         self.is_fullscreen: bool = True
         self.is_runing_exports_01: bool = False
@@ -56,8 +63,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.export_01_timer: QTimer = QTimer()
         self.export_02_timer: QTimer = QTimer()
         self.is_export_setup: bool = False
-        self.sharepoint_export: SharepointExport = None
-        self.current_operation_state: OperationState = OperationState.FAULT.value
+        self.sharepoint_export: SharepointExport | None = None
+        self.current_operation_state: int = OperationState.FAULT.value
 
         self.operation_mode: int = 0
         self.is_reject_enabled: bool = False
@@ -71,6 +78,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.export_backend: int = 0
         self.is_export_folder_01_enabled: bool = False
         self.is_export_folder_02_enabled: bool = False
+        self.is_export_single_file_enabled: bool = False
         self.export_folder_01_path: str = ""
         self.export_folder_02_path: str = ""
         self.export_folder_01_frequency: int = 1
@@ -115,6 +123,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_backend', 'Export Backend', "0"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "0"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_02_enabled', 'Export Folder 02 Enabled', "0"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_single_file_enabled', 'Export Single File Enabled', "0"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_path', 'Export Folder 01 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_path', 'Export Folder 02 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_frequency', 'Export Folder 01 Frequency', "1"))
@@ -138,7 +147,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light', "0"))
             self.connection.commit()
 
-        result: list = self.cursor.execute('SELECT * FROM settings').fetchall()
+        result: list[Any] = self.cursor.execute('SELECT * FROM settings').fetchall()
         if result:
             for setting in result:
                 match setting[0]:
@@ -164,6 +173,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         self.is_export_folder_01_enabled = bool(setting[2])
                     case 'is_export_folder_02_enabled':
                         self.is_export_folder_02_enabled = bool(setting[2])
+                    case 'is_export_single_file_enabled':
+                        self.is_export_single_file_enabled = bool(setting[2])
                     case 'export_folder_01_path':
                         self.export_folder_01_path = str(setting[2])
                     case 'export_folder_02_path':
@@ -206,6 +217,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         self.ops_password = str(setting[2])
                     case 'is_stack_light_enabled':
                         self.is_stack_light_enabled = bool(setting[2])
+                    case _:
+                        pass
 
         self.setup_sensors()
         #self.setup_export()
@@ -287,6 +300,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.comboBoxExportBackend.currentIndexChanged.connect(self.export_backend_changed)
         self.checkBoxFolderExport01.stateChanged.connect(self.folder_export_01_changed)
         self.checkBoxFolderExport02.stateChanged.connect(self.folder_export_02_changed)
+        self.checkBoxSingleFileMode.stateChanged.connect(self.single_file_mode_changed)
         self.checkBoxSharepointExport01.stateChanged.connect(self.sharepoint_export_01_changed)
         self.checkBoxSharepointExport02.stateChanged.connect(self.sharepoint_export_02_changed)
         self.spinBoxFolderExport01Frequency.valueChanged.connect(self.folder_frequency_01_changed)
@@ -325,6 +339,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         #Exports
         self.checkBoxFolderExport01.setChecked(self.is_export_folder_01_enabled)
         self.checkBoxFolderExport02.setChecked(self.is_export_folder_02_enabled)
+        self.checkBoxSingleFileMode.setChecked(self.is_export_single_file_enabled)
         self.checkBoxSharepointExport01.setChecked(self.is_export_sharepoint_01_enabled)
         self.checkBoxSharepointExport02.setChecked(self.is_export_sharepoint_02_enabled)
         self.spinBoxFolderExport01Frequency.setValue(self.export_folder_01_frequency)
@@ -388,6 +403,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         w.writerows(result)
                     f.close()
                     try:
+                        if not self.sharepoint_export:
+                            raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
                     except:
                         self.logger.exception('Unable to upload count file')
@@ -401,6 +418,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                         w.writerows(result)
                     f.close()
                     try:
+                        if not self.sharepoint_export:
+                            raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
                     except:
                         self.logger.exception('Unable to upload product file')
@@ -471,15 +490,15 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if not self.operation_mode == OperationMode.REJECT.value:
                 self.count_good(time=datetime.now())
                 self.update_counts()
-                self.last_count = None
+                self.last_count_1 = None
                 return
             else:
-                if self.last_count:
-                    self.count_reject(time=datetime.now(), count=self.last_count)
+                if self.last_count_1:
+                    self.count_reject(time=datetime.now(), count=self.last_count_1)
                     self.update_counts()
-                    self.last_count = Count(self.loaded_product.product_id, datetime.now())
+                    self.last_count_1 = Count(self.loaded_product.product_id, datetime.now())
                 else:
-                    self.last_count = Count(self.loaded_product.product_id, datetime.now())
+                    self.last_count_1 = Count(self.loaded_product.product_id, datetime.now())
             
         elif sensor is self.outfeed_sensor:
             self.labelOutfeedDebug.setText("1")
@@ -488,11 +507,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 return
             if not self.operation_mode == OperationMode.REJECT.value:
                 return
-            if not self.last_count:
+            if not self.last_count_1:
                 return
-            self.count_good(time=datetime.now(), count=self.last_count)
+            self.count_good(time=datetime.now(), count=self.last_count_1)
             self.update_counts()
-            self.last_count = None
+            self.last_count_1 = None
 
     def sensor_deactivated(self, sensor: DigitalInputDevice):
         if sensor is self.infeed_sensor:
@@ -606,27 +625,28 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                self.labelTargetPPM.setText("*N/A*") 
 
     def reset_counts(self):
-        if self.last_count:
-            self.count_reject(time=datetime.now(), count=self.last_count)
+        if self.last_count_1:
+            self.count_reject(time=datetime.now(), count=self.last_count_1)
             self.update_counts()
-            self.last_count = None
+            self.last_count_1 = None
         self.current_good = 0
         self.current_reject = 0
-        self.current_ppm_offset = 0
-        self.current_ppm = 0
+        self.current_ppm_offset = 0 #TODO: Not used?
+        self.current_ppm_1 = 0
+        self.current_ppm_2 = 0
         self.reset_ppm_list()
         pallette = self.tab.palette()
         pallette.setColor(self.tab.backgroundRole(), QColor(239,239,239))
         self.tab.setPalette(pallette)
         self.update_counts()
 
-    def update_counts(self):
+    def update_counts(self, sensor=None):
         self.labelGood.setText(str(self.current_good))
         self.labelPaceCount.setText(str(self.current_good))
         self.labelRejects.setText(str(self.current_reject))
-        self.labelCurrentPPM.setText(str(round(self.current_ppm)))
-        self.labelPPMDelta.setText(str(round(self.current_ppm_delta)))
-        if self.current_ppm_delta >= 0:
+        self.labelCurrentPPM.setText(str(round(self.current_ppm_1)))
+        self.labelPPMDelta.setText(str(round(self.current_ppm_delta_1)))
+        if self.current_ppm_delta_1 >= 0:
             self.labelPPMDirection.setText('+')
             pallette = self.framePPMDelta.palette()
             pallette.setColor(self.framePPMDelta.backgroundRole(), QColor(100,250,100))
@@ -658,7 +678,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.current_operation_state = OperationState.FAULT.value
         else:
             if self.operation_mode == OperationMode.PACE.value:
-                if self.current_ppm_delta >= 0:
+                if self.current_ppm_delta_1 >= 0:
                     self.current_operation_state = OperationState.NORMAL.value
                 else:
                     self.current_operation_state = OperationState.WARNING.value
@@ -744,6 +764,12 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
     def folder_export_02_changed(self, status: int):
         self.is_export_folder_02_enabled = bool(status == 2)
         self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_folder_02_enabled"', (str(self.is_export_folder_02_enabled),))
+        self.connection.commit()
+        #self.export_backend_changed(self.export_backend)
+
+    def single_file_mode_changed(self, status: int):
+        self.is_export_single_file_enabled = bool(status == 2)
+        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_single_file_enabled"', (str(self.is_export_single_file_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
@@ -883,6 +909,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(True)
+                self.frameDouble.setVisible(False)
             case OperationMode.REJECT.value:
                 self.frameCountTarget.setVisible(False)
                 self.framePPM.setVisible(False)
@@ -894,6 +921,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(True)
                 self.frameCount.setVisible(True)
+                self.frameDouble.setVisible(False)
             case OperationMode.TARGET.value:
                 self.frameCountTarget.setVisible(True)
                 self.framePPM.setVisible(False)
@@ -905,6 +933,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(True)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(True)
+                self.frameDouble.setVisible(False)
             case OperationMode.PACE.value:
                 self.frameCountTarget.setVisible(False)
                 self.framePPM.setVisible(True)
@@ -916,27 +945,59 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(False)
+                self.frameDouble.setVisible(False)
+            case OperationMode.DOUBLE.value:
+                self.frameCountTarget.setVisible(False)
+                self.framePPM.setVisible(False)
+                self.frameRejects.setVisible(False)
+                self.labelOutfeedDebug.setEnabled(False)
+                self.labelOutfeedDebug_2.setEnabled(False)
+                self.frameRejects.setVisible(False)
+                self.frameQualityPercent.setVisible(False)
+                self.frameCountTarget.setVisible(False)
+                self.labelGoodText.setVisible(False)
+                self.frameCount.setVisible(False)
+                self.frameDouble.setVisible(True) #TODO: Implement in UI
     
-    def add_count_to_ppm_stack(self, count: Count):
-        self.count_list.append(count)
-        if len(self.count_list) > 10:
-            self.count_list.pop(0)
-        self.calculate_ppm()
+    def add_count_to_ppm_stack_1(self, count: Count):
+        self.count_list_1.append(count)
+        if len(self.count_list_1) > 10:
+            self.count_list_1.pop(0)
+        self.calculate_ppm_1()
+
+    def add_count_to_ppm_stack_2(self, count: Count):
+        self.count_list_2.append(count)
+        if len(self.count_list_2) > 10:
+            self.count_list_2.pop(0)
+        self.calculate_ppm_2()
 
     def reset_ppm_list(self):
-        self.count_list.clear()
-        self.current_ppm = 0
-        self.current_ppm_delta = 0
+        self.count_list_1.clear()
+        self.current_ppm_1 = 0
+        self.current_ppm_delta_1 = 0
+        self.count_list_2.clear()
+        self.current_ppm_2 = 0
+        self.current_ppm_delta_2 = 0
 
-    def calculate_ppm(self):
-        if len(self.count_list) <= 1:
+    def calculate_ppm_1(self):
+        if len(self.count_list_1) <= 1:
             return
-        start: datetime = self.count_list[0].date
-        stop: datetime = self.count_list[-1].date
+        start: datetime = self.count_list_1[0].date
+        stop: datetime = self.count_list_1[-1].date
         difference = (stop - start).total_seconds()
         minutes = difference / 60
-        self.current_ppm = len(self.count_list) / minutes
-        self.current_ppm_delta = self.current_ppm - self.loaded_product.target_pace
+        self.current_ppm_1 = len(self.count_list_1) / minutes
+        self.current_ppm_delta_1 = self.current_ppm_1 - self.loaded_product.target_pace
+
+    def calculate_ppm_2(self):
+        if len(self.count_list_2) <= 1:
+            return
+        start: datetime = self.count_list_2[0].date
+        stop: datetime = self.count_list_2[-1].date
+        difference = (stop - start).total_seconds()
+        minutes = difference / 60
+        self.current_ppm_2 = len(self.count_list_2) / minutes
+        self.current_ppm_delta_2 = self.current_ppm_2 - self.loaded_product.target_pace
 
     def clear_count_database(self):
         self.cursor.execute('DELETE FROM counts')
