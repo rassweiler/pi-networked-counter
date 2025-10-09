@@ -1,13 +1,14 @@
 #! /usr/bin/env python3
 
 import json
-import os
 import sys
 import logging
-import msal
 import tomllib
-from typing import Dict, Any, Optional, List
-from msal_extensions import PersistedTokenCache, build_encrypted_persistence, FilePersistence, FilePersistenceBase
+from typing import Dict, Any, List
+from pathlib import Path
+from datetime import datetime
+from msal import PublicClientApplication # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
+from msal_extensions import PersistedTokenCache, build_encrypted_persistence, FilePersistence # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
 
 class Colors:
     OKCYAN = '\033[96m'
@@ -19,6 +20,7 @@ class Colors:
 class Token(object):
     def __init__(self, location:str=".cache", plaintext:bool=False, setting_file: str = '.setup.toml'):
         self.logger = logging.getLogger(__name__)
+        Path('./logs/').mkdir(parents=True, exist_ok=True)
         logging.basicConfig(filename='./logs/.token_generator_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
         self.settings: Dict[str, Any] = {}
         self.client_id: str = ''
@@ -26,12 +28,12 @@ class Token(object):
         self.endpoint: str = ''
         self.scopes: List[str] = []
         self.LoadSettings(setting_file)
-        self.persistance: FilePersistenceBase = self.build_persistence(location=location, plaintext=plaintext)
-        self.cache: PersistedTokenCache = PersistedTokenCache(persistence=self.persistance)
-        self.app: msal.PublicClientApplication = msal.PublicClientApplication(
+        self.persistance: FilePersistence = self.build_persistence(location=location, plaintext=plaintext) # pyright: ignore[reportUnknownMemberType]
+        self.cache: PersistedTokenCache = PersistedTokenCache(persistence=self.persistance) # pyright: ignore[reportUnknownMemberType]
+        self.app: PublicClientApplication = PublicClientApplication(
             client_id = self.client_id,
             authority = self.auth,
-            token_cache = self.cache,
+            token_cache = self.cache, # pyright: ignore[reportUnknownMemberType]
             )
 
     def LoadSettings(self, setting_file: str) -> None:
@@ -49,21 +51,29 @@ class Token(object):
             else:
                 self.logger.warning('Unable to load sharepoint settings')
 
-    def build_persistence(self,location: str, plaintext: bool) -> FilePersistenceBase | None:
+    def build_persistence(self,location: str, plaintext: bool) -> FilePersistence: # pyright: ignore[reportUnknownParameterType]
+        """
+           Build a suitable persistence instance based your current OS. 
+           Aquire persistance using encryption or plain text as fallback if enabled.
+           Note: This sample stores both encrypted persistence and plaintext persistence into same location,
+           therefore their data would likely override with each other.
+        """
         if plaintext:
-            print(Colors.WARNING + "Attempting plaintext persistance." + Colors.ENDC)
+            self.logger.info('Attempting plaintext persistance...')
             try:
-                return FilePersistence(location)
+                return FilePersistence(location) # pyright: ignore[reportUnknownVariableType]
             except:
-                print(Colors.FAIL + "Failed to create plaintext persistance." + Colors.ENDC)
+                self.logger.error('Failed to create plaintext persistance.')
+                raise ValueError('Failed to create plaintext persistance.')
         else:
-            print(Colors.WARNING + "Attempting encrypted persistance." + Colors.ENDC)
+            self.logger.info('Attempting encrypted persistance...')
             try:
-                return build_encrypted_persistence(location)
+                return build_encrypted_persistence(location) # pyright: ignore[reportUnknownVariableType]
             except:
-                print(Colors.FAIL + "Failed to create encrypted persistance." + Colors.ENDC)
+                self.logger.error('Failed to create encrypted persistance.')
+                raise ValueError('Failed to create encrypted persistance.')
 
-    def build_persistence_new(self,location: str, plaintext_fallback: bool = True) -> FilePersistenceBase:
+    def build_persistence_new(self,location: str, plaintext_fallback: bool = True) -> FilePersistence: # pyright: ignore[reportUnknownParameterType]
         """
            Build a suitable persistence instance based your current OS. 
            Aquire persistance using encryption or plain text as fallback if enabled.
@@ -72,7 +82,7 @@ class Token(object):
         """
         try:
             self.logger.info('Attempting encrypted persistance...')
-            return build_encrypted_persistence(location)
+            return build_encrypted_persistence(location) # pyright: ignore[reportUnknownVariableType]
         except:
             """
                 On Linux, encryption exception will be raised during initialization.
@@ -80,35 +90,42 @@ class Token(object):
                 but will be raised during their load() or save().
             """
             if not plaintext_fallback:
-                raise
+                self.logger.warning('Plaintext fallback disabled and unable to aquire encrypted persistance.')
+                raise ValueError('Plaintext fallback disabled and unable to aquire encrypted persistance.')
             self.logger.warning('Encryption not available, using plaintext...')
-            return FilePersistence(location)
+            return FilePersistence(location) # pyright: ignore[reportUnknownVariableType]
     
-    def aquire_token(self) -> Dict[str, Any]:
-        new_token = None
-        accounts: List[Dict[str, str]] = self.app.get_accounts() # pyright: ignore[reportUnknownMemberType]
+    def aquire_token(self) -> Dict[str, str]:
+        """
+        Get existing token or create a new token
+        :return: dict with token information or empty dict
+        """
+        new_token: None | Dict[str, str] = None
+        accounts: List[Dict[str, str]] = self.app.get_accounts() # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
         if accounts:
-            print(Colors.OKCYAN + "Checking cache for accounts and tokens..." + Colors.ENDC)
-            new_token = self.app.acquire_token_silent(scopes=self.scopes, account=accounts[0])
+            self.logger.info('Checking cache for accounts and tokens...')
+            new_token = self.app.acquire_token_silent(scopes=self.scopes, account=accounts[0]) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
 
         if not new_token:
-            print(Colors.OKCYAN + "Creating new token..." + Colors.ENDC)
-            flow = self.app.initiate_device_flow(scopes=self.scopes)
+            self.logger.info('Creating new token..')
+            flow: Dict[str, Any] = self.app.initiate_device_flow(scopes=self.scopes) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
             if not "user_code" in flow:
-                print(Colors.FAIL + "Failed to create flow: %s" + Colors.ENDC  % json.dumps(flow, indent=4))
+                self.logger.error('Failed to create flow: %s'  % json.dumps(flow, indent=4))
                 raise ValueError("Failed to create flow: %s" % json.dumps(flow, indent=4))
-            print(flow["message"])
+            if 'message' in flow:
+                print(flow["message"]) # pyright: ignore[reportUnknownArgumentType]
+                self.logger.info(flow["message"]) # pyright: ignore[reportUnknownArgumentType]
             sys.stdout.flush()
-            new_token = self.app.acquire_token_by_device_flow(flow)
-            
-        if "access_token" in new_token:
-            print(Colors.OKCYAN + "Access token retrieved..." + Colors.ENDC)
+            new_token = self.app.acquire_token_by_device_flow(flow) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+        if type(new_token) is dict and "access_token" in new_token: # pyright: ignore[reportUnknownArgumentType]
+            self.logger.info('Access token retrieved...')
             sys.stdout.flush()
-            return(new_token)
+            return(new_token) # pyright: ignore[reportUnknownVariableType, reportReturnType]
         else:
-            print(Colors.FAIL + "Failed to aquire token: %s" + Colors.ENDC  % new_token)
-        return {}
+            self.logger.error('Failed to aquire token: %s' % new_token) # pyright: ignore[reportUnknownArgumentType]
+            raise ValueError('Failed to aquire token: %s' % new_token) # pyright: ignore[reportUnknownArgumentType]
     
 if __name__ == "__main__":
     token = Token(plaintext=True)

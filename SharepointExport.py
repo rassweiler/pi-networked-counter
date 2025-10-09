@@ -3,13 +3,16 @@
 import os
 import logging
 import requests
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
+from pathlib import Path
+from datetime import datetime
 #from urllib.parse import quote
 from GenerateToken import Token, Colors
 
 class SharepointExport(object):
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        Path('./logs/').mkdir(parents=True, exist_ok=True)
         logging.basicConfig(filename='./logs/.sharepoint_export_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
         self.token: Dict[str, Any] = {}
         self.header: Dict[str, str] = {}

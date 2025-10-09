@@ -2,4 +2,6 @@
 
 cd /home/tech/pi-networked-counter
 
-/home/tech/pi-networked-counter/venv/bin/pyuic6 form.ui -o MainWindow.py
+source venv/bin/activate
+
+pyuic6 form.ui -o MainWindow.py

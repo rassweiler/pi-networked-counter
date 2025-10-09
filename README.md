@@ -23,6 +23,11 @@ source venv/bin/activate
 pip3 install gpiozero lgpio msal msal_extensions python-dotenv pygobject
 ```
 
+- Install optional packages:
+```
+sudo apt install qtcreator sqlitebrowser
+```
+
 ## Device Setup (Pi5+)
 
 ### Base Version Part List
@@ -59,23 +64,21 @@ pip3 install gpiozero lgpio msal msal_extensions python-dotenv pygobject
 
 ### Pi Software
 
-- Update system`
+- Update system
 ```
 sudo apt update && sudo apt upgrade
 ```
 
 - Install packages
 ```
-sudo apt install git python code wvkbd matchbox-keyboard cmake libcairo2-dev gobject-introspection libgirepository1.0-dev seahorse python3-pyqt6 python3-gpiozero python3-lgpio python3-msal python3-msal-extensions python3-dotenv
+sudo apt install < .packages
 ```
+
+- PI configure
+Set the locale to UTF-8
 
 - Setup keyring for sharepoint integration
 Run seahorse and make sure there is a default keystore
-
-- Install optional packages
-```
-sudo apt install qtcreator sqlitebrowser
-```
 
 - clone repository to PI:
 ```
@@ -108,12 +111,13 @@ echo "dtoverlay=gpio-poweroff,gpiopin=25,active_low" >> /boot/firmware/config.tx
 
 ### Sharepoint Setup
 
-- Create `.env.sharepoint` file with access details:
+- Add to the `.settup.toml` file your sharepoint access details:
 ```
-AUTHORITY="https://login.microsoftonline.com/{AID}"
-CLIENT_ID="{CID}"
-SCOPE="User.ReadBasic.All Files.ReadWrite Sites.ReadWrite.All"
-ENDPOINT="https://graph.microsoft.com/v1.0/me"
+[sharepoint]
+authority = "https://login.microsoftonline.com/{AID}"
+client = "{CID}"
+scopes = 'User.ReadBasic.All Files.ReadWrite Sites.ReadWrite.All'
+endpoint = "https://graph.microsoft.com/v1.0/me" 
 ```
 
 - run the `get_token.sh` script once to initialise your sharepoint token, it should provide a link and a key to login using a browser.

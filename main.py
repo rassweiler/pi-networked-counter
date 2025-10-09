@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, QTimer
 from gpiozero import DigitalInputDevice, LED
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from MainWindow import Ui_MainWindow
+from pathlib import Path
 from Product import Product
 from Count import Count
 from SharepointExport import SharepointExport
@@ -34,13 +35,15 @@ class OperationState(Enum):
     WARNING = 1
     FAULT = 2
 
-class ObjectCounter(QMainWindow, Ui_MainWindow):
+class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntypedBaseClass]
     def __init__(self, parent = None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
+        self.root_dir = Path(__file__).parent
+        Path('./logs/').mkdir(parents=True, exist_ok=True)
         logging.basicConfig(filename='./logs/.counter_debug_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.log', level=logging.DEBUG)
         self.logger.info('Started Program')
-        self.setupUi(self)
+        self.setupUi(self) # pyright: ignore[reportUnknownMemberType]
 
         self.current_good: int = 0
         self.current_reject: int = 0
@@ -121,17 +124,17 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_red', 'Stack Red', "24"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('machine_name', 'Machine Name', "sample_machine"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_backend', 'Export Backend', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_02_enabled', 'Export Folder 02 Enabled', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_single_file_enabled', 'Export Single File Enabled', "0"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "False"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_02_enabled', 'Export Folder 02 Enabled', "False"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_single_file_enabled', 'Export Single File Enabled', "False"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_path', 'Export Folder 01 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_path', 'Export Folder 02 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_frequency', 'Export Folder 01 Frequency', "1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_frequency', 'Export Folder 02 Frequency', "1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_period', 'Export Folder 01 Period', "1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_period', 'Export Folder 02 Period', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_01_enabled', 'Export Sharepoint 01 Enabled', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_02_enabled', 'Export Sharepoint 02 Enabled', "0"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_01_enabled', 'Export Sharepoint 01 Enabled', "False"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_02_enabled', 'Export Sharepoint 02 Enabled', "False"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_frequency', 'Export Sharepoint 01 Frequency', "1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_frequency', 'Export Sharepoint 02 Frequency', "1"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_period', 'Export Sharepoint 01 Period', "1"))
@@ -144,7 +147,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_path', 'Export Sharepoint 02 Path', ""))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('tech_password', 'Tech Password', "230167"))
             self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('ops_password', 'Ops Password', "111111"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light', "0"))
+            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light Enabled', "False"))
             self.connection.commit()
 
         result: list[Any] = self.cursor.execute('SELECT * FROM settings').fetchall()
@@ -170,11 +173,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                     case 'export_backend':
                         self.export_backend = int(setting[2])
                     case 'is_export_folder_01_enabled':
-                        self.is_export_folder_01_enabled = bool(setting[2])
+                        self.is_export_folder_01_enabled = setting[2] == 'True'
                     case 'is_export_folder_02_enabled':
-                        self.is_export_folder_02_enabled = bool(setting[2])
+                        self.is_export_folder_02_enabled = setting[2] == 'True'
                     case 'is_export_single_file_enabled':
-                        self.is_export_single_file_enabled = bool(setting[2])
+                        self.is_export_single_file_enabled = setting[2] == 'True'
                     case 'export_folder_01_path':
                         self.export_folder_01_path = str(setting[2])
                     case 'export_folder_02_path':
@@ -188,9 +191,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                     case 'export_folder_02_period':
                         self.export_folder_02_period = int(setting[2])
                     case 'is_export_sharepoint_01_enabled':
-                        self.is_export_sharepoint_01_enabled = bool(setting[2])
+                        self.is_export_sharepoint_01_enabled = setting[2] == 'True'
                     case 'is_export_sharepoint_02_enabled':
-                        self.is_export_sharepoint_02_enabled = bool(setting[2])
+                        self.is_export_sharepoint_02_enabled = setting[2] == 'True'
                     case 'export_sharepoint_01_path':
                         self.export_sharepoint_01_path = str(setting[2])
                     case 'export_sharepoint_02_path':
@@ -216,7 +219,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                     case 'ops_password':
                         self.ops_password = str(setting[2])
                     case 'is_stack_light_enabled':
-                        self.is_stack_light_enabled = bool(setting[2])
+                        self.is_stack_light_enabled = setting[2] == 'True'
                     case _:
                         pass
 
@@ -286,6 +289,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
         self.spinBoxInfeedPin.valueChanged.connect(self.infeed_pin_changed)
         self.spinBoxOutfeedPin.valueChanged.connect(self.outfeed_pin_changed)
         self.doubleSpinBoxBounceTime.valueChanged.connect(self.bounce_time_changed)
+        self.pushButtonTriggerGoodCount.clicked.connect(self.testing_trigger_good_count)
+        self.pushButtonTriggerRejectCount.clicked.connect(self.testing_trigger_reject_count)
         #Stacklight
         self.checkBoxEnableStackLight.stateChanged.connect(self.enable_stack_light_changed)
         self.spinBoxStackLightGreenOutput.valueChanged.connect(self.stack_light_pin_green_changed)
@@ -374,16 +379,27 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if not self.is_export_setup:
                 return
             if self.is_export_folder_01_enabled:
+                Path(self.export_folder_01_path).mkdir(parents=True, exist_ok=True)
                 result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_01_period),))
                 if result:
-                    with open(self.export_folder_01_path + "/Counts/Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
+                    filepath: str
+                    if self.is_export_single_file_enabled:
+                        filepath = Path(self.export_folder_01_path + "/Counts_" + self.machine_name + '.csv').as_posix()
+                    else:
+                        filepath = Path(self.export_folder_01_path + "/Counts_" + self.machine_name + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv').as_posix()
+                    with open(filepath, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
                 result = self.cursor.execute("SELECT * FROM products")
                 if result:
-                    with open(self.export_folder_01_path + "/Products/Products_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
+                    filepath: str
+                    if self.is_export_single_file_enabled:
+                        filepath = Path(self.export_folder_01_path + "/Products_" + self.machine_name + '.csv').as_posix()
+                    else:
+                        filepath = Path(self.export_folder_01_path + "/Products_" + self.machine_name + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv').as_posix()
+                    with open(filepath, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Title", "Target Count", "Target Pace", "Product Weight"])
                         w.writerows(result)
@@ -434,16 +450,27 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
             if not self.is_export_setup:
                 return
             if self.is_export_folder_02_enabled:
+                Path(self.export_folder_02_path).mkdir(parents=True, exist_ok=True)
                 result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_02_period),))
                 if result:
-                    with open(self.export_folder_02_path + "/Counts/Counts_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
+                    filepath: str
+                    if self.is_export_single_file_enabled:
+                        filepath = Path(self.export_folder_02_path + "/Counts_" + self.machine_name + '.csv').as_posix()
+                    else:
+                        filepath = Path(self.export_folder_02_path + "/Counts_" + self.machine_name + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv').as_posix()
+                    with open(filepath, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
                 result = self.cursor.execute("SELECT * FROM products")
                 if result:
-                    with open(self.export_folder_02_path + "/Products/Products_" + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv', 'w', newline='') as f:
+                    filepath: str
+                    if self.is_export_single_file_enabled:
+                        filepath = Path(self.export_folder_02_path + "/Products_" + self.machine_name + '.csv').as_posix()
+                    else:
+                        filepath = Path(self.export_folder_02_path + "/Products_" + self.machine_name + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M') + '.csv').as_posix()
+                    with open(filepath, 'w', newline='') as f:
                         w = writer(f)
                         w.writerow(["ID", "Title", "Target Count", "Target Pace", "Product Weight"])
                         w.writerows(result)
@@ -909,7 +936,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(True)
-                self.frameDouble.setVisible(False)
+                #self.frameDouble.setVisible(False)
             case OperationMode.REJECT.value:
                 self.frameCountTarget.setVisible(False)
                 self.framePPM.setVisible(False)
@@ -921,7 +948,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(True)
                 self.frameCount.setVisible(True)
-                self.frameDouble.setVisible(False)
+                #self.frameDouble.setVisible(False)
             case OperationMode.TARGET.value:
                 self.frameCountTarget.setVisible(True)
                 self.framePPM.setVisible(False)
@@ -933,7 +960,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(True)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(True)
-                self.frameDouble.setVisible(False)
+                #self.frameDouble.setVisible(False)
             case OperationMode.PACE.value:
                 self.frameCountTarget.setVisible(False)
                 self.framePPM.setVisible(True)
@@ -945,7 +972,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(False)
-                self.frameDouble.setVisible(False)
+                #self.frameDouble.setVisible(False)
             case OperationMode.DOUBLE.value:
                 self.frameCountTarget.setVisible(False)
                 self.framePPM.setVisible(False)
@@ -957,7 +984,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.frameCountTarget.setVisible(False)
                 self.labelGoodText.setVisible(False)
                 self.frameCount.setVisible(False)
-                self.frameDouble.setVisible(True) #TODO: Implement in UI
+                #self.frameDouble.setVisible(True) #TODO: Implement in UI
     
     def add_count_to_ppm_stack_1(self, count: Count):
         self.count_list_1.append(count)
@@ -1005,6 +1032,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
 
     def enable_stack_light_changed(self, status: int):
         self.is_stack_light_enabled = bool(status == 2)
+        print(self.is_stack_light_enabled)
         self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_stack_light_enabled"', (str(self.is_stack_light_enabled),))
         self.connection.commit()
         self.frameStackLight.setVisible(self.is_stack_light_enabled)
@@ -1067,6 +1095,18 @@ class ObjectCounter(QMainWindow, Ui_MainWindow):
                 self.labelIOStackRed.setPixmap(QPixmap('GreenCircle.png'))
                 self.labelIOStackYellow.setPixmap(QPixmap('RedCircle.png'))
                 self.labelIOStackGreen.setPixmap(QPixmap('RedCircle.png'))
+
+    def testing_trigger_good_count(self) -> None:
+        if not self.loaded_product:
+            return
+        self.count_good(datetime.now())
+        self.update_counts()
+
+    def testing_trigger_reject_count(self) -> None:
+        if not self.loaded_product:
+            return
+        self.count_reject(datetime.now())
+        self.update_counts()
 
     def quit_app(self):
         if self.export_01_timer.isActive():
