@@ -219,5 +219,6 @@ cython_debug/
 #Sqlite3
 *.db
 *.database
-
-.env.sharepoint
+.setup.toml
+Exports/
+*.zip

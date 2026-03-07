@@ -1,0 +1,7 @@
+git
+cmake
+python3-pyqt6
+python3-gpiozero
+python3-msal
+python3-msal-extensions
+qt6-wayland

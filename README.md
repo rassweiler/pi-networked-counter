@@ -1,11 +1,13 @@
 # pi-networked-counter
 Network attached counter using Pi5, python, pyqt6, and sqlite
 
-![Assembly](./Docs/Assembly_01.png)
-![Assembly Opened](./Docs/Assembly_02.png)
-![Sensor Assembly](./Docs/SensorAssembly_01.png)
-![Sensor Assembly 2](./Docs/SensorAssembly_02.png)
-![Sensor Assembly Opened](./Docs/SensorAssembly_03.png)
+![Assembly](./Docs/Assembly_001.png)
+![Assembly IO](./Docs/Assembly_002.png)
+![Assembly Rear](./Docs/Assembly_004.png)
+![Assembly Opened](./Docs/Assembly_005.png)
+![Sensor Assembly](./Docs/Assembly_006.png)
+![Sensor Assembly 2](./Docs/Assembly_007.png)
+![Sensor Assembly Opened](./Docs/Assembly_008.png)
 
 ## Dev Setup (Linux)
 
@@ -49,6 +51,9 @@ sudo apt install qtcreator sqlitebrowser
 - 1 [USB A Keystone Jack Cable](https://www.amazon.ca/Keystone-Haokiang-Adapters-Connector-Cable-20CM/dp/B07JFRLLQF)
 - 1 [22awg Wire 2 Conductor 25ft](https://www.digikey.ca/en/products/detail/prysmian/C6348A-46-10/2761061)
 - 1 [Rugged Metal Pushbutton - 16mm White Momentary](https://www.adafruit.com/product/558)
+- 2 [Wire Connector Pack](https://www.amazon.ca/Connector-Solderless-Connectors-Stripping-Electrical/dp/B08929GXGK)
+- 1 [GPIO Ribbon Cable](https://www.adafruit.com/product/1988)
+- 1 [GPIO Header](https://www.pishop.ca/product/40-pin-gpio-connector-header/)
 
 ### Stacklight Version Part List
 - 1 [DC Power Panel Jack](https://www.amazon.ca/DIYhz-Socket-Female-Mounting-Connector/dp/B079D6P26P)
@@ -74,6 +79,52 @@ sudo apt update && sudo apt upgrade
 sudo apt install < .packages
 ```
 
+- Disable sudo NOPASSWD:
+```
+sudo nano /etc/sudoers.d/010_pi-nopasswd
+
+remove NOPASSWD:
+```
+
+- Enable sudo logging:
+```
+sudo visudo
+
+Insert:
+
+Defaults    logfile=/var/log/sudo
+```
+
+- Harden ssh config:
+```
+sudo nano /etc/ssh/sshd_config
+
+PermitRootLogin prohibit-password
+MaxAuthTries 5
+MaxSessions 3
+MaxStartups 3:90:15
+PasswordAuthentication no
+```
+
+- Harden ssh keys:
+```
+echo -e "# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\n KexAlgorithms sntrup761x25519-sha512,sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\n\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-gcm@openssh.com,aes128-ctr\n\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\n\nHostKeyAlgorithms sk-ssh-ed25519-cert-v01@openssh.com,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,ssh-ed25519,rsa-sha2-512,rsa-sha2-256\n\nRequiredRSASize 3072\n\nCASignatureAlgorithms sk-ssh-ed25519@openssh.com,ssh-ed25519,rsa-sha2-512,rsa-sha2-256\n\nGSSAPIKexAlgorithms gss-curve25519-sha256-,gss-group16-sha512-\n\nHostbasedAcceptedAlgorithms sk-ssh-ed25519-cert-v01@openssh.com,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,ssh-ed25519,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-256\n\nPubkeyAcceptedAlgorithms sk-ssh-ed25519-cert-v01@openssh.com,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,ssh-ed25519,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-256\n\n" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+```
+
+- Remove avahi:
+```
+sudo systemctl stop avahi-daemon && sudo systemctl disable avahi-daemon
+
+sudo apt purge avahi-daemon -y
+```
+
+- Remove CUPS:
+```
+sudo systemctl stop cups && sudo systemctl disable cups
+
+sudo apt purge cups -y 
+```
+
 - PI configure
 Set the locale to UTF-8
 
@@ -90,26 +141,19 @@ git clone https://github.com/rassweiler/pi-networked-counter.git && cd pi-networ
 sudo cp objectcounter.desktop /etc/xdg/autostart/objectcounter.desktop
 ```
 
-- Copy the keyboard scripts:
-```
-sudo cp toggle-keyboard.sh /usr/bin/toggle-keyboard.sh
-sudo chmod +x /usr/bin/toggle-keyboard.sh
-sudo cp toggle-keyboard.desktop /usr/share/raspi-ui-overrides/applications/toggle-keyboard.desktop
-```
-
 - Add panel icon
 ```
-mkdir -p ~/.config/lxpanel/LXDE-pi/panels/
-cp /etc/xdg/lxpanel/LXDE-pi/panels/panel ~/.config/lxpanel/LXDE-pi/panels/panel
-cat panel-plugin >> ~/.config/lxpanel/LXDE-pi/panels/panel
+cp objectcounter.desktop ~/.local/share/applications/
 ```
+
+Then restart the system to get the app in the menu under other, then right click the app and select add to taskbar
 
 - Setup startup IO for push button
 ```
 echo "dtoverlay=gpio-poweroff,gpiopin=25,active_low" >> /boot/firmware/config.txt
 ```
 
-### Sharepoint Setup
+### Sharepoint Setup (Optional)
 
 - Add to the `.settup.toml` file your sharepoint access details:
 ```

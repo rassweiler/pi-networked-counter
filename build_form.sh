@@ -1,6 +1,7 @@
 #!/bin/bash
 
-cd /home/tech/pi-networked-counter
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 source venv/bin/activate
 

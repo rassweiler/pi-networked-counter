@@ -1,3 +1,5 @@
 #!/bin/bash
-cd /home/tech/pi-networked-counter/
-python -m main
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+python3 main.py

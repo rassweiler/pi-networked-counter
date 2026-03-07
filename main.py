@@ -3,13 +3,14 @@
 import sys
 import sqlite3
 import logging
-import tomllib
+import socket
 from enum import Enum
 from csv import writer
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Any, Optional
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QWidget
 from gpiozero import DigitalInputDevice, LED
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from MainWindow import Ui_MainWindow
@@ -35,8 +36,8 @@ class OperationState(Enum):
     WARNING = 1
     FAULT = 2
 
-class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntypedBaseClass]
-    def __init__(self, parent = None):
+class ObjectCounter(QMainWindow, Ui_MainWindow):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
         self.root_dir = Path(__file__).parent
@@ -66,7 +67,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
         self.export_01_timer: QTimer = QTimer()
         self.export_02_timer: QTimer = QTimer()
         self.is_export_setup: bool = False
-        self.sharepoint_export: SharepointExport | None = None
+        self.sharepoint_export: Optional[SharepointExport] = None
         self.current_operation_state: int = OperationState.FAULT.value
 
         self.operation_mode: int = 0
@@ -107,50 +108,50 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
         #Create table structures
         self.logger.info('Setting up tables...')
         self.connection = sqlite3.connect('/home/tech/pi-networked-counter/database.db',detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES, check_same_thread=False)
-        self.cursor = self.connection.cursor()
-        self.cursor.execute('PRAGMA foreign_keys = ON')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS settings(setting_id TEXT PRIMARY KEY UNIQUE, title TEXT, value TEXT);')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS products(product_id INTEGER PRIMARY KEY UNIQUE, title TEXT, target_count INTEGER, target_pace INTEGER, product_weight REAL);')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS counts(count_id INTEGER PRIMARY KEY, countdatetime INTEGER UNIQUE NOT NULL, machine TEXT NOT NULL, reject INTEGER NOT NULL, product_id INTEGER NOT NULL, FOREIGN KEY(product_id) REFERENCES products (product_id) ON DELETE CASCADE);')
-        result = self.cursor.execute('SELECT EXISTS (SELECT 1 FROM settings);').fetchone()
+        self.sqlcursor: sqlite3.Cursor = self.connection.cursor()
+        self.sqlcursor.execute('PRAGMA foreign_keys = ON')
+        self.sqlcursor.execute('CREATE TABLE IF NOT EXISTS settings(setting_id TEXT PRIMARY KEY UNIQUE, title TEXT, value TEXT);')
+        self.sqlcursor.execute('CREATE TABLE IF NOT EXISTS products(product_id INTEGER PRIMARY KEY UNIQUE, title TEXT, target_count INTEGER, target_pace INTEGER, product_weight REAL);')
+        self.sqlcursor.execute('CREATE TABLE IF NOT EXISTS counts(count_id INTEGER PRIMARY KEY, countdatetime INTEGER UNIQUE NOT NULL, machine TEXT NOT NULL, reject INTEGER NOT NULL, product_id INTEGER NOT NULL, FOREIGN KEY(product_id) REFERENCES products (product_id) ON DELETE CASCADE);')
+        result = self.sqlcursor.execute('SELECT EXISTS (SELECT 1 FROM settings);').fetchone()
         if not result[0]:
             self.logger.info('Settings not found, creating defaults')
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('operation_mode', 'Operation Mode', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('bounce_time', 'Bounce Time (s)', "0.1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('infeed_pin', 'Infeed Pin', "17"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('outfeed_pin', 'Outfeed Pin', "23"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_green', 'Stack Green', "27"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_yellow', 'Stack Yellow', "22"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_red', 'Stack Red', "24"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('machine_name', 'Machine Name', "sample_machine"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_backend', 'Export Backend', "0"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "False"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_02_enabled', 'Export Folder 02 Enabled', "False"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_single_file_enabled', 'Export Single File Enabled', "False"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_path', 'Export Folder 01 Path', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_path', 'Export Folder 02 Path', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_frequency', 'Export Folder 01 Frequency', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_frequency', 'Export Folder 02 Frequency', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_period', 'Export Folder 01 Period', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_period', 'Export Folder 02 Period', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_01_enabled', 'Export Sharepoint 01 Enabled', "False"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_02_enabled', 'Export Sharepoint 02 Enabled', "False"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_frequency', 'Export Sharepoint 01 Frequency', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_frequency', 'Export Sharepoint 02 Frequency', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_period', 'Export Sharepoint 01 Period', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_period', 'Export Sharepoint 02 Period', "1"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_site_id', 'Export Sharepoint 01 Site ID', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_site_id', 'Export Sharepoint 02 Site ID', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_list_id', 'Export Sharepoint 01 List ID', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_list_id', 'Export Sharepoint 02 List ID', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_path', 'Export Sharepoint 01 Path', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_path', 'Export Sharepoint 02 Path', ""))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('tech_password', 'Tech Password', "230167"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('ops_password', 'Ops Password', "111111"))
-            self.cursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('operation_mode', 'Operation Mode', "0"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('bounce_time', 'Bounce Time (s)', "0.1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('infeed_pin', 'Infeed Pin', "17"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('outfeed_pin', 'Outfeed Pin', "23"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_green', 'Stack Green', "27"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_yellow', 'Stack Yellow', "22"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('stack_pin_red', 'Stack Red', "24"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('machine_name', 'Machine Name', "sample_machine"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_backend', 'Export Backend', "0"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_01_enabled', 'Export Folder 01 Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_folder_02_enabled', 'Export Folder 02 Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_single_file_enabled', 'Export Single File Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_path', 'Export Folder 01 Path', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_path', 'Export Folder 02 Path', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_frequency', 'Export Folder 01 Frequency', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_frequency', 'Export Folder 02 Frequency', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_01_period', 'Export Folder 01 Period', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_folder_02_period', 'Export Folder 02 Period', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_01_enabled', 'Export Sharepoint 01 Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_export_sharepoint_02_enabled', 'Export Sharepoint 02 Enabled', "False"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_frequency', 'Export Sharepoint 01 Frequency', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_frequency', 'Export Sharepoint 02 Frequency', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_period', 'Export Sharepoint 01 Period', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_period', 'Export Sharepoint 02 Period', "1"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_site_id', 'Export Sharepoint 01 Site ID', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_site_id', 'Export Sharepoint 02 Site ID', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_list_id', 'Export Sharepoint 01 List ID', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_list_id', 'Export Sharepoint 02 List ID', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_01_path', 'Export Sharepoint 01 Path', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('export_sharepoint_02_path', 'Export Sharepoint 02 Path', ""))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('tech_password', 'Tech Password', "230167"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('ops_password', 'Ops Password', "111111"))
+            self.sqlcursor.execute('INSERT INTO settings VALUES (?,?,?);', ('is_stack_light_enabled', 'Stack Light Enabled', "False"))
             self.connection.commit()
 
-        result: list[Any] = self.cursor.execute('SELECT * FROM settings').fetchall()
+        result: list[Any] = self.sqlcursor.execute('SELECT * FROM settings').fetchall()
         if result:
             for setting in result:
                 match setting[0]:
@@ -224,10 +225,16 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                         pass
 
         self.setup_sensors()
-        #self.setup_export()
         self.set_ui()
         self.get_all_products()
-        
+
+    def check_internet_availability(self):
+        try:
+            socket.create_connection(('8.8.8.8', 53), timeout=5)
+            return True
+        except OSError:
+            return False
+
     def setup_sensors(self):
         self.logger.info('Setting up sensors...')
         self.infeed_sensor: DigitalInputDevice = DigitalInputDevice(pin=self.infeed_pin, pull_up=True, bounce_time=self.bounce_time)
@@ -244,34 +251,41 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
         self.logger.info('Setting up exports...')
         self.is_export_setup = False
         if self.export_backend == ExportBackend.NONE.value:
-            pass
+            return
         elif self.export_backend == ExportBackend.FOLDER.value:
             if not self.is_export_folder_01_enabled and not self.is_export_folder_02_enabled:
+                self.logger.error('Folder export selected but neither exports are enabled')
                 return
             if self.is_export_folder_01_enabled and self.export_folder_01_path == "":
+                self.logger.error('Folder export 1 selected but no path given')
                 return
             if self.is_export_folder_02_enabled and self.export_folder_02_path == "":
+                self.logger.error('Folder export 2 selected but no path given')
                 return
             self.is_export_setup = True
         elif self.export_backend == ExportBackend.SHAREPOINT.value:
             if not self.is_export_sharepoint_01_enabled and not self.is_export_sharepoint_02_enabled:
+                self.logger.error('Sharepoint export selected but neither exports are enabled')
                 return
             if self.is_export_sharepoint_01_enabled and self.export_sharepoint_01_path == "":
+                self.logger.error('Sharepoint export 1 selected but no path given')
                 return
             if self.is_export_sharepoint_02_enabled and self.export_sharepoint_02_path == "":
+                self.logger.error('Sharepoint export 2 selected but no path given')
                 return
             if self.is_export_sharepoint_01_enabled and self.export_sharepoint_01_site_id == "":
+                self.logger.error('Sharepoint export 1 selected but no site id given')
                 return
             if self.is_export_sharepoint_02_enabled and self.export_sharepoint_02_site_id == "":
+                self.logger.error('Sharepoint export 2 selected but no site id given')
                 return
             if self.is_export_sharepoint_01_enabled and self.export_sharepoint_01_list_id == "":
+                self.logger.error('Sharepoint export 1 selected but no list id given')
                 return
             if self.is_export_sharepoint_02_enabled and self.export_sharepoint_02_list_id == "":
+                self.logger.error('Sharepoint export 2 selected but no list id given')
                 return
-            #try:
-            #    self.sharepoint_export.update_token()
-            #except:
-            #    return
+
             self.sharepoint_export = SharepointExport()
             self.is_export_setup = True
         
@@ -377,10 +391,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.is_runing_exports_02 = False
         elif self.export_backend == ExportBackend.FOLDER.value:
             if not self.is_export_setup:
+                self.logger.error('Unable to export to folder, export is not setup')
                 return
             if self.is_export_folder_01_enabled:
                 Path(self.export_folder_01_path).mkdir(parents=True, exist_ok=True)
-                result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_01_period),))
+                result = self.sqlcursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_01_period),))
                 if result:
                     filepath: str
                     if self.is_export_single_file_enabled:
@@ -392,7 +407,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                         w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
-                result = self.cursor.execute("SELECT * FROM products")
+                result = self.sqlcursor.execute("SELECT * FROM products")
                 if result:
                     filepath: str
                     if self.is_export_single_file_enabled:
@@ -407,9 +422,10 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.is_runing_exports_01 = True
         elif self.export_backend == ExportBackend.SHAREPOINT.value:
             if not self.is_export_setup:
+                self.logger.error('Unable to export to sharepoint, export is not setup')
                 return
             if self.is_export_sharepoint_01_enabled:
-                result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_01_period),))
+                result = self.sqlcursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_01_period),))
                 if result:
                     file_name: str = "Counts_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
@@ -421,10 +437,12 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                     try:
                         if not self.sharepoint_export:
                             raise
+                        if not self.check_internet_availability():
+                            raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
                     except:
                         self.logger.exception('Unable to upload count file')
-                result = self.cursor.execute("SELECT * FROM products")
+                result = self.sqlcursor.execute("SELECT * FROM products")
                 if result:
                     file_name: str = "Products_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
@@ -435,6 +453,8 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                     f.close()
                     try:
                         if not self.sharepoint_export:
+                            raise
+                        if not self.check_internet_availability():
                             raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_01_site_id, self.export_sharepoint_01_list_id, self.export_sharepoint_01_path)
                     except:
@@ -448,10 +468,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.is_runing_exports_02 = False
         elif self.export_backend == ExportBackend.FOLDER.value:
             if not self.is_export_setup:
+                self.logger.error('Unable to export to folder, export is not setup')
                 return
             if self.is_export_folder_02_enabled:
                 Path(self.export_folder_02_path).mkdir(parents=True, exist_ok=True)
-                result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_02_period),))
+                result = self.sqlcursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_folder_02_period),))
                 if result:
                     filepath: str
                     if self.is_export_single_file_enabled:
@@ -463,7 +484,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                         w.writerow(["ID", "Date Time", "Machine", "Reject", "Product ID"])
                         w.writerows(result)
                     f.close()
-                result = self.cursor.execute("SELECT * FROM products")
+                result = self.sqlcursor.execute("SELECT * FROM products")
                 if result:
                     filepath: str
                     if self.is_export_single_file_enabled:
@@ -478,9 +499,10 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.is_runing_exports_02 = True
         elif self.export_backend == ExportBackend.SHAREPOINT.value:
             if not self.is_export_setup:
+                self.logger.error('Unable to export to sharepoint, export is not setup')
                 return
-            if self.is_export_sharepoint_01_enabled:
-                result = self.cursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_02_period),))
+            if self.is_export_sharepoint_01_enabled and self.sharepoint_export:
+                result = self.sqlcursor.execute("SELECT * FROM counts WHERE countdatetime >= ?",(datetime.now() - timedelta(minutes=self.export_sharepoint_02_period),))
                 if result:
                     file_name: str = "Counts_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
@@ -490,10 +512,14 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                         w.writerows(result)
                     f.close()
                     try:
+                        if not self.sharepoint_export:
+                            raise
+                        if not self.check_internet_availability():
+                            raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
                     except:
                         self.logger.exception('Unable to upload count file')
-                result = self.cursor.execute("SELECT * FROM products")
+                result = self.sqlcursor.execute("SELECT * FROM products")
                 if result:
                     file_name: str = "Products_" + self.machine_name + '.csv'
                     file_path: str = "/tmp/"
@@ -503,6 +529,10 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                         w.writerows(result)
                     f.close()
                     try:
+                        if not self.sharepoint_export:
+                            raise
+                        if not self.check_internet_availability():
+                            raise
                         self.sharepoint_export.upload_file(file_path, file_name, self.export_sharepoint_02_site_id, self.export_sharepoint_02_list_id, self.export_sharepoint_02_path)
                     except:
                         self.logger.exception('Unable to upload product file')
@@ -515,13 +545,13 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             if not self.loaded_product:
                 return
             if not self.operation_mode == OperationMode.REJECT.value:
-                self.count_good(time=datetime.now())
+                self.count_good(Count(self.loaded_product.product_id, datetime.now()))
                 self.update_counts()
                 self.last_count_1 = None
                 return
             else:
                 if self.last_count_1:
-                    self.count_reject(time=datetime.now(), count=self.last_count_1)
+                    self.count_reject(self.last_count_1)
                     self.update_counts()
                     self.last_count_1 = Count(self.loaded_product.product_id, datetime.now())
                 else:
@@ -536,7 +566,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                 return
             if not self.last_count_1:
                 return
-            self.count_good(time=datetime.now(), count=self.last_count_1)
+            self.count_good(count=self.last_count_1)
             self.update_counts()
             self.last_count_1 = None
 
@@ -549,25 +579,20 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.labelOutfeedDebug.setText("0")
             self.labelIOOutfeedInput.setPixmap(QPixmap('RedCircle.png'))
 
-    def count_good(self, time: datetime, count: Count = None):
+    def count_good(self, count: Count):
         try:
-            self.logger.info('Counting good product...')
-            if not count:
-                count = Count(self.loaded_product.product_id, time)
-            self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,0,count.product_id))
+            self.logger.info('Counting good product...')      
+            self.sqlcursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,0,count.product_id))
             self.connection.commit()
             self.current_good += 1
-            self.add_count_to_ppm_stack(count)
+            self.add_count_to_ppm_stack_1(count)
         except:
             self.logger.exception('Unable to count good product')
 
-    def count_reject(self, time: datetime, count: Count = None):
+    def count_reject(self, count: Count):
         try:
             self.logger.info('Counting reject product...')
-            if count:
-                self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,1,count.product_id))
-            else:
-                self.cursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (time,self.machine_name,1,self.loaded_product.product_id))
+            self.sqlcursor.execute('INSERT INTO counts (count_id, countdatetime, machine, reject, product_id) VALUES (NULL,?,?,?,?);', (count.date,self.machine_name,1,count.product_id))
             self.connection.commit()
             self.current_reject += 1
         except:
@@ -575,10 +600,10 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
 
     def get_all_products(self):
         self.all_products.clear()
-        self.cursor.execute('SELECT * FROM products')
-        products = self.cursor.fetchall()
+        self.sqlcursor.execute('SELECT * FROM products')
+        products = self.sqlcursor.fetchall()
         for product in products:
-            self.all_products.append(Product(product_id=product[0],name=product[1],count=product[2],pace=product[3],weight=product[4]))
+            self.all_products.append(Product(product_id=product[0],name=product[1],target_count=product[2],target_pace=product[3],weight=product[4]))
         self.update_product_list()
 
     def update_product_list(self):
@@ -594,6 +619,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
                 if product.name == item[0].text():
                     self.selected_product = product
                     break
+            if not self.selected_product:
+                self.logger.error('Product list selection changed, Unable to locate selected product.')
+                return
             self.productName.setText(self.selected_product.name)
             self.productTargetCount.setText(str(self.selected_product.target_count))
             self.lineEditPace.setText(str(self.selected_product.target_pace))
@@ -610,27 +638,31 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
             self.selected_product.target_count = int(self.productTargetCount.text()) or 0
             self.selected_product.target_pace = int(self.lineEditPace.text()) or 0
             self.selected_product.weight = float(self.productWeight.text()) or 0
-            self.cursor.execute('UPDATE products SET title = ?, target_count = ?, target_pace = ?, product_weight = ? WHERE product_id = ?', (self.selected_product.name, self.selected_product.target_count, self.selected_product.target_pace, self.selected_product.weight, self.selected_product.product_id))
+            self.sqlcursor.execute('UPDATE products SET title = ?, target_count = ?, target_pace = ?, product_weight = ? WHERE product_id = ?', (self.selected_product.name, self.selected_product.target_count, self.selected_product.target_pace, self.selected_product.weight, self.selected_product.product_id))
             self.connection.commit()
             self.update_product_list()
 
     def create_product(self):
         if not self.productName.text():
+            self.logger.warning('Unable to create product, no product name set.')
             return
         if not self.productTargetCount.text():
+            self.logger.warning('Unable to create product, no product count set.')
             return
         if not self.lineEditPace.text():
+            self.logger.warning('Unable to create product, no product pace set.')
             return
         if not self.productWeight.text():
+            self.logger.warning('Unable to create product, no product weight set.')
             return
-        self.cursor.execute('INSERT INTO products(title, target_count, target_pace, product_weight) VALUES(?, ?, ?, ?)', (self.productName.text(), int(self.productTargetCount.text()), int(self.lineEditPace.text()), float(self.productWeight.text())))
+        self.sqlcursor.execute('INSERT INTO products(title, target_count, target_pace, product_weight) VALUES(?, ?, ?, ?)', (self.productName.text(), int(self.productTargetCount.text()), int(self.lineEditPace.text()), float(self.productWeight.text())))
         self.connection.commit()
         self.get_all_products()
         self.update_product_list()
 
     def delete_product(self):
         if self.selected_product and len(self.all_products) > 1:
-            self.cursor.execute('DELETE FROM products WHERE product_id = ?', (str(self.selected_product.product_id)))
+            self.sqlcursor.execute('DELETE FROM products WHERE product_id = ?', (str(self.selected_product.product_id)))
             self.connection.commit()
             self.selected_product = None
             self.product_list_selection_changed()
@@ -653,12 +685,11 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
 
     def reset_counts(self):
         if self.last_count_1:
-            self.count_reject(time=datetime.now(), count=self.last_count_1)
+            self.count_reject(count=self.last_count_1)
             self.update_counts()
             self.last_count_1 = None
         self.current_good = 0
         self.current_reject = 0
-        self.current_ppm_offset = 0 #TODO: Not used?
         self.current_ppm_1 = 0
         self.current_ppm_2 = 0
         self.reset_ppm_list()
@@ -720,31 +751,31 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
     def machine_name_changed(self, name: str):
         if name != self.machine_name:
             self.machine_name = name
-            self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "machine_name"', (str(self.machine_name),))
+            self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "machine_name"', (str(self.machine_name),))
             self.connection.commit()
         
     def infeed_pin_changed(self, value):
         if value != self.infeed_pin:
             self.infeed_pin = value
-            self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "infeed_pin"', (str(self.infeed_pin),))
+            self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "infeed_pin"', (str(self.infeed_pin),))
             self.connection.commit()
 
     def outfeed_pin_changed(self, value):
         if value != self.outfeed_pin:
             self.outfeed_pin = value
-            self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "outfeed_pin"', (str(self.outfeed_pin),))
+            self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "outfeed_pin"', (str(self.outfeed_pin),))
             self.connection.commit()
     
     def bounce_time_changed(self, value):
         if value != self.bounce_time:
             self.bounce_time = value
-            self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "bounce_time"', (str(self.bounce_time),))
+            self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "bounce_time"', (str(self.bounce_time),))
             self.connection.commit()
 
     def export_backend_changed(self, index: int):
         if self.export_backend != index:
             self.export_backend = index
-            self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_backend"', (str(self.export_backend),))
+            self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_backend"', (str(self.export_backend),))
             self.connection.commit()
         match index:
             case ExportBackend.NONE.value:
@@ -784,112 +815,112 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
 
     def folder_export_01_changed(self, status: int):
         self.is_export_folder_01_enabled = bool(status == 2)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_folder_01_enabled"', (str(self.is_export_folder_01_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_folder_01_enabled"', (str(self.is_export_folder_01_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
     def folder_export_02_changed(self, status: int):
         self.is_export_folder_02_enabled = bool(status == 2)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_folder_02_enabled"', (str(self.is_export_folder_02_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_folder_02_enabled"', (str(self.is_export_folder_02_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
     def single_file_mode_changed(self, status: int):
         self.is_export_single_file_enabled = bool(status == 2)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_single_file_enabled"', (str(self.is_export_single_file_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_single_file_enabled"', (str(self.is_export_single_file_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
     def sharepoint_export_01_changed(self, status: int):
         self.is_export_sharepoint_01_enabled = bool(status == 2)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_sharepoint_01_enabled"', (str(self.is_export_sharepoint_01_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_sharepoint_01_enabled"', (str(self.is_export_sharepoint_01_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
     def sharepoint_export_02_changed(self, status: int):
         self.is_export_sharepoint_02_enabled = bool(status == 2)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_sharepoint_02_enabled"', (str(self.is_export_sharepoint_02_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_export_sharepoint_02_enabled"', (str(self.is_export_sharepoint_02_enabled),))
         self.connection.commit()
         #self.export_backend_changed(self.export_backend)
 
     def folder_frequency_01_changed(self, value):
         self.export_folder_01_frequency = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_frequency"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_frequency"', (str(value),))
         self.connection.commit()
 
     def folder_frequency_02_changed(self, value):
         self.export_folder_02_frequency = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_frequency"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_frequency"', (str(value),))
         self.connection.commit()
 
     def sharepoint_frequency_01_changed(self, value):
         self.export_sharepoint_01_frequency = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_frequency"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_frequency"', (str(value),))
         self.connection.commit()
 
     def sharepoint_frequency_02_changed(self, value):
         self.export_sharepoint_02_frequency = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_frequency"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_frequency"', (str(value),))
         self.connection.commit()
 
     def folder_period_01_changed(self, value):
         self.export_folder_01_period = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_period"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_period"', (str(value),))
         self.connection.commit()
 
     def folder_period_02_changed(self, value):
         self.export_folder_02_period = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_period"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_period"', (str(value),))
         self.connection.commit()
 
     def sharepoint_period_01_changed(self, value):
         self.export_sharepoint_01_period = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_period"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_period"', (str(value),))
         self.connection.commit()
 
     def sharepoint_period_02_changed(self, value):
         self.export_sharepoint_02_period = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_period"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_period"', (str(value),))
         self.connection.commit()
 
     def folder_path_01_changed(self, value):
         self.export_folder_01_path = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_path"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_01_path"', (str(value),))
         self.connection.commit()
 
     def folder_path_02_changed(self, value):
         self.export_folder_02_path = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_path"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_folder_02_path"', (str(value),))
         self.connection.commit()
 
     def sharepoint_path_01_changed(self, value):
         self.export_sharepoint_01_path = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_path"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_path"', (str(value),))
         self.connection.commit()
 
     def sharepoint_path_02_changed(self, value):
         self.export_sharepoint_02_path = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_path"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_path"', (str(value),))
         self.connection.commit()
 
     def sharepoint_site_id_01_changed(self, value):
         self.export_sharepoint_01_site_id = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_site_id"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_site_id"', (str(value),))
         self.connection.commit()
 
     def sharepoint_site_id_02_changed(self, value):
         self.export_sharepoint_02_site_id = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_site_id"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_site_id"', (str(value),))
         self.connection.commit()
     
     def sharepoint_list_id_01_changed(self, value):
         self.export_sharepoint_01_list_id = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_list_id"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_01_list_id"', (str(value),))
         self.connection.commit()
 
     def sharepoint_list_id_02_changed(self, value):
         self.export_sharepoint_02_list_id = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_list_id"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "export_sharepoint_02_list_id"', (str(value),))
         self.connection.commit()
 
     def login_attempt(self):
@@ -922,7 +953,7 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
 
     def operation_mode_changed(self, index: int):
         self.operation_mode = index
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "operation_mode"', (str(self.operation_mode),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "operation_mode"', (str(self.operation_mode),))
         self.connection.commit()
         match self.operation_mode:
             case OperationMode.COUNT.value:
@@ -1009,6 +1040,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
     def calculate_ppm_1(self):
         if len(self.count_list_1) <= 1:
             return
+        if not self.loaded_product:
+            self.logger.error('Unable to calculate ppm, no product loaded.')
+            return
         start: datetime = self.count_list_1[0].date
         stop: datetime = self.count_list_1[-1].date
         difference = (stop - start).total_seconds()
@@ -1019,6 +1053,9 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
     def calculate_ppm_2(self):
         if len(self.count_list_2) <= 1:
             return
+        if not self.loaded_product:
+            self.logger.error('Unable to calculate ppm 2, no product loaded.')
+            return
         start: datetime = self.count_list_2[0].date
         stop: datetime = self.count_list_2[-1].date
         difference = (stop - start).total_seconds()
@@ -1027,29 +1064,28 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
         self.current_ppm_delta_2 = self.current_ppm_2 - self.loaded_product.target_pace
 
     def clear_count_database(self):
-        self.cursor.execute('DELETE FROM counts')
+        self.sqlcursor.execute('DELETE FROM counts')
         self.connection.commit()
 
     def enable_stack_light_changed(self, status: int):
         self.is_stack_light_enabled = bool(status == 2)
-        print(self.is_stack_light_enabled)
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_stack_light_enabled"', (str(self.is_stack_light_enabled),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "is_stack_light_enabled"', (str(self.is_stack_light_enabled),))
         self.connection.commit()
         self.frameStackLight.setVisible(self.is_stack_light_enabled)
 
     def stack_light_pin_green_changed(self, value):
         self.stack_pin_green = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_green"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_green"', (str(value),))
         self.connection.commit()
 
     def stack_light_pin_yellow_changed(self, value):
         self.stack_pin_yellow = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_yellow"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_yellow"', (str(value),))
         self.connection.commit()
 
     def stack_light_pin_red_changed(self, value):
         self.stack_pin_red = value
-        self.cursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_red"', (str(value),))
+        self.sqlcursor.execute('UPDATE settings SET value = ? WHERE setting_id = "stack_pin_red"', (str(value),))
         self.connection.commit()
 
     def update_stack_light(self):
@@ -1098,14 +1134,16 @@ class ObjectCounter(QMainWindow, Ui_MainWindow): # pyright: ignore[reportUntyped
 
     def testing_trigger_good_count(self) -> None:
         if not self.loaded_product:
+            self.logger.error('Unable to create test good count, no product loaded.')
             return
-        self.count_good(datetime.now())
+        self.count_good(Count(self.loaded_product.product_id, datetime.now()))
         self.update_counts()
 
     def testing_trigger_reject_count(self) -> None:
         if not self.loaded_product:
+            self.logger.error('Unable to create test reject count, no product loaded.')
             return
-        self.count_reject(datetime.now())
+        self.count_reject(Count(self.loaded_product.product_id, datetime.now()))
         self.update_counts()
 
     def quit_app(self):

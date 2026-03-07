@@ -1,11 +1,14 @@
+#! /usr/bin/env python3
 
+from dataclasses import dataclass
+
+@dataclass
 class Product(object):
-    def __init__(self, product_id: int = 0, name: str = "", count: int = 0, pace: int = 0, weight: float = 0.0):
-        self.product_id: int = product_id
-        self.name: str = name
-        self.weight: float = weight
-        self.target_count: int = count
-        self.target_pace: int = pace
+    product_id: int = 0
+    name: str = ""
+    target_count: int = 0
+    target_pace: int = 0
+    weight: float = 0.0
     
 if __name__ == '__main__':
     exit(0)
